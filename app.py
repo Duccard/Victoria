@@ -33,36 +33,38 @@ with st.sidebar:
         # 4. Refresh the app
         st.rerun()
 
+    # 2. Generate Assistant response
+    with st.chat_message("assistant"):
+        with st.spinner("Consulting the archives..."):
+            combined_query = (
+                f"HISTORY: {st.session_state.chat_history}\n\nLATEST QUESTION: {prompt}"
+            )
 
-# 2. Initialize the Brain
-@st.cache_resource
-def load_victoria():
-    db = Chroma(persist_directory="chroma_db", embedding_function=OpenAIEmbeddings())
-    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0)
+            response = victoria_brain.invoke(
+                {"query": combined_query, "history": st.session_state.chat_history}
+            )
 
-    # Simplified Template: We only ask for context and question
-    template = """You are Victoria, an expert Victorian Historian. 
-    Use the provided context (which includes history if available) to answer.
-    
-    Context: {context}
-    Question: {question}
-    
-    Helpful Answer:"""
+            answer = response["result"]
+            st.markdown(answer)
 
-    QA_CHAIN_PROMPT = PromptTemplate(
-        input_variables=["context", "question"], template=template
-    )
+            # --- IMPROVED BIBLIOGRAPHER SECTION ---
+            with st.expander("📜 View Historical Citations"):
+                st.write("Victoria found the following evidence in the archives:")
 
-    return RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=db.as_retriever(search_kwargs={"k": 6}),
-        return_source_documents=True,
-        chain_type_kwargs={"prompt": QA_CHAIN_PROMPT},
-    )
+                # Use a set to avoid showing the same file name multiple times
+                unique_sources = set()
+                for doc in response["source_documents"]:
+                    source_name = doc.metadata.get("source", "Unknown Archive")
+                    # Clean up the path to show just the filename
+                    clean_name = os.path.basename(source_name)
+                    unique_sources.add(clean_name)
 
+                for source in unique_sources:
+                    st.markdown(f"* **Source Document:** _{source}_")
 
-victoria_brain = load_victoria()
+                st.caption(
+                    "Note: These documents were retrieved using semantic search (k=6) from the local vector database."
+                )
 
 # 3. Session State
 if "messages" not in st.session_state:

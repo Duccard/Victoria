@@ -16,9 +16,21 @@ load_dotenv()
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
     st.title("Victoria's Archive")
-    if st.button("Clear Conversation"):
+
+    # Adding a bit of flair
+    st.markdown("---")
+
+    if st.button("🗑️ Clear Archive Memory"):
+        # 1. Clear the visible chat history
         st.session_state.messages = []
+
+        # 2. Clear the AI's internal memory string
         st.session_state.chat_history = ""
+
+        # 3. Provide feedback
+        st.toast("Memory wiped. Victoria is ready for a new topic.")
+
+        # 4. Refresh the app
         st.rerun()
 
 

@@ -12,7 +12,7 @@ st.title("📜 Victoria: RAG Historian")
 
 load_dotenv()
 
-# --- Sidebar for Day 3 Polish ---
+# --- Sidebar ---
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
     st.title("Victoria's Archive")
@@ -21,17 +21,18 @@ with st.sidebar:
     )
     if st.button("Clear Conversation"):
         st.session_state.messages = []
-        st.session_state.chat_history = ""  # Reset history
+        st.session_state.chat_history = ""
         st.rerun()
 
 
-# 2. Initialize the Brain (Keeping it simple to avoid import errors)
+# 2. Initialize the Brain
 @st.cache_resource
 def load_victoria():
     db = Chroma(persist_directory="chroma_db", embedding_function=OpenAIEmbeddings())
     llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0)
 
-    # Day 3 Prompt: Now includes a spot for 'history'
+    # Note: RetrievalQA expects the variable name 'context' and 'question'
+    # but we added 'history' to the mix.
     template = """You are Victoria, an expert Victorian Historian. 
     Below is the chat history and some context from the archives. 
     Use the context to answer the latest question.
@@ -58,25 +59,29 @@ def load_victoria():
 
 victoria_brain = load_victoria()
 
-# 3. Memory & Chat Setup
+# 3. Session State Setup
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = ""
 
+# Display chat history in UI
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
 # 4. The Logic
 if prompt := st.chat_input("Ask about the factory conditions..."):
+    # Add User message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    # Generate Assistant message
     with st.chat_message("assistant"):
         with st.spinner("Searching archives..."):
-            # We manually pass the history string into the prompt
+            # CRITICAL: We pass 'query' (required by RetrievalQA)
+            # and 'history' (required by our custom template)
             response = victoria_brain.invoke(
                 {"query": prompt, "history": st.session_state.chat_history}
             )
@@ -84,11 +89,12 @@ if prompt := st.chat_input("Ask about the factory conditions..."):
             answer = response["result"]
             st.markdown(answer)
 
-            # Update history for the NEXT turn
-            st.session_state.chat_history += f"\nUser: {prompt}\nAI: {answer}\n"
+            # Update history string for the next turn
+            st.session_state.chat_history += f"\nUser: {prompt}\nVictoria: {answer}\n"
 
             with st.expander("View Evidence"):
                 for doc in response["source_documents"]:
-                    st.write(f"- {doc.metadata.get('source')}")
+                    st.write(f"- {doc.metadata.get('source', 'Unknown PDF')}")
 
+    # Save Assistant message to UI history
     st.session_state.messages.append({"role": "assistant", "content": answer})

@@ -39,10 +39,15 @@ def load_victoria():
     db = Chroma(persist_directory="chroma_db", embedding_function=OpenAIEmbeddings())
     llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0)
 
-    # Simplified Template for stability with RetrievalQA
-    template = """You are Victoria, an expert Victorian Historian. 
-    Below is the chat history and some context from the archives. 
-    Use the context to answer the latest question.
+    # New Strict Template
+    template = """You are Victoria, a specialized Victorian Era Historian (1837–1901).
+    Your knowledge is strictly limited to the provided context from the archives.
+    
+    RULES:
+    1. Only answer questions related to the Victorian Era or the Industrial Revolution.
+    2. If the question is about a different time period (like Ancient Rome or the Holy Roman Empire), 
+       politely inform the user that your expertise is limited to the Victorian Era.
+    3. If the answer is not contained within the provided context, say you do not know.
     
     Context: {context}
     Question: {question}

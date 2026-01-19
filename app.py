@@ -72,7 +72,7 @@ for message in st.session_state.messages:
 
 # 4. The Logic
 if prompt := st.chat_input("Ask about the factory conditions..."):
-    # Add User message
+    # Add User message to UI
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -80,11 +80,11 @@ if prompt := st.chat_input("Ask about the factory conditions..."):
     # Generate Assistant message
     with st.chat_message("assistant"):
         with st.spinner("Searching archives..."):
-            # CRITICAL: We pass 'query' (required by RetrievalQA)
-            # and 'history' (required by our custom template)
-            response = victoria_brain.invoke(
-                {"query": prompt, "history": st.session_state.chat_history}
-            )
+            # We use 'query' for the text search and 'history' for the prompt
+            # If RetrievalQA is still being stubborn, we use this precise format:
+            inputs = {"query": prompt, "history": st.session_state.chat_history}
+
+            response = victoria_brain.invoke(inputs)
 
             answer = response["result"]
             st.markdown(answer)
@@ -95,6 +95,9 @@ if prompt := st.chat_input("Ask about the factory conditions..."):
             with st.expander("View Evidence"):
                 for doc in response["source_documents"]:
                     st.write(f"- {doc.metadata.get('source', 'Unknown PDF')}")
+
+    # Save Assistant message to UI history
+    st.session_state.messages.append({"role": "assistant", "content": answer})
 
     # Save Assistant message to UI history
     st.session_state.messages.append({"role": "assistant", "content": answer})

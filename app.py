@@ -72,32 +72,34 @@ for message in st.session_state.messages:
 
 # 4. The Logic
 if prompt := st.chat_input("Ask about the factory conditions..."):
-    # Add User message to UI
+    # 1. Show user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Generate Assistant message
+    # 2. Generate Assistant response
     with st.chat_message("assistant"):
-        with st.spinner("Searching archives..."):
-            # We use 'query' for the text search and 'history' for the prompt
-            # If RetrievalQA is still being stubborn, we use this precise format:
-            inputs = {"query": prompt, "history": st.session_state.chat_history}
+        with st.spinner("Consulting the archives..."):
+            # BULLETPROOF METHOD: Combine history and prompt into one string
+            # This satisfies the chain's requirement for a single 'query'
+            combined_query = (
+                f"HISTORY: {st.session_state.chat_history}\n\nLATEST QUESTION: {prompt}"
+            )
 
-            response = victoria_brain.invoke(inputs)
+            # We must also satisfy the 'history' key in your template,
+            # so we provide it here even if it's partly redundant
+            response = victoria_brain.invoke(
+                {"query": combined_query, "history": st.session_state.chat_history}
+            )
 
             answer = response["result"]
             st.markdown(answer)
 
-            # Update history string for the next turn
-            st.session_state.chat_history += f"\nUser: {prompt}\nVictoria: {answer}\n"
-
+            # 3. Show Sources
             with st.expander("View Evidence"):
                 for doc in response["source_documents"]:
                     st.write(f"- {doc.metadata.get('source', 'Unknown PDF')}")
 
-    # Save Assistant message to UI history
-    st.session_state.messages.append({"role": "assistant", "content": answer})
-
-    # Save Assistant message to UI history
+    # 4. Update Memory & UI History
+    st.session_state.chat_history += f"\nUser: {prompt}\nVictoria: {answer}\n"
     st.session_state.messages.append({"role": "assistant", "content": answer})

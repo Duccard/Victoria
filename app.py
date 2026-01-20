@@ -1,7 +1,5 @@
 import sys
 import os
-
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import streamlit as st
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
@@ -9,7 +7,7 @@ from langchain.chains import RetrievalQA
 from langchain_core.prompts import PromptTemplate
 
 # --- NEW IMPORT FROM YOUR RETRIEVER FILE ---
-from retriever import get_retriever
+from core.retriever import get_retriever
 
 # 1. PAGE CONFIGURATION
 st.set_page_config(page_title="Victoria: Victorian Historian", page_icon="👑")

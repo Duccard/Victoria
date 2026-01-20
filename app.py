@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import os
 
 # 1. PAGE CONFIGURATION
-st.set_page_config(page_title="Victoria: Victorian Historian", page_icon="📜")
+st.set_page_config(page_title="Victoria: Victorian Historian", page_icon="👑")
 st.title("📜 Victoria: RAG Historian")
 
 load_dotenv()
@@ -76,33 +76,37 @@ for message in st.session_state.messages:
 
 # 6. THE CHAT LOGIC
 if prompt := st.chat_input("Ask about the factory conditions..."):
-    # Add User message to UI
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Generate Assistant response
     with st.chat_message("assistant"):
         with st.spinner("Consulting the archives..."):
-            # Bake the history into the query to give the LLM context
             combined_query = f"Recent History: {st.session_state.chat_history}\n\nUser Question: {prompt}"
-
-            # Use the 'query' key as expected by RetrievalQA
             response = victoria_brain.invoke({"query": combined_query})
 
             answer = response["result"]
             st.markdown(answer)
 
-            # --- OPTION A: THE BIBLIOGRAPHER ---
+            # --- PASTE THE NEW EVIDENCE UI HERE ---
             with st.expander("📜 View Historical Citations"):
-                st.write("Victoria found evidence in the following documents:")
-                unique_sources = set()
+                st.write("Victoria found evidence in the following archive locations:")
+                citations = set()
                 for doc in response["source_documents"]:
-                    source_name = doc.metadata.get("source", "Unknown Archive")
-                    unique_sources.add(os.path.basename(source_name))
+                    source_name = os.path.basename(
+                        doc.metadata.get("source", "Unknown")
+                    )
+                    page_num = doc.metadata.get("page", "Unknown")
 
-                for source in unique_sources:
-                    st.markdown(f"* **Source Document:** _{source}_")
+                    if isinstance(page_num, int):
+                        display_page = page_num + 1
+                    else:
+                        display_page = page_num
+
+                    citations.add(f"_{source_name}_ (Page {display_page})")
+
+                for citation in sorted(citations):
+                    st.markdown(f"* **Source:** {citation}")
 
     # 7. UPDATE MEMORY & UI HISTORY
     st.session_state.chat_history += f"User: {prompt} AI: {answer} | "

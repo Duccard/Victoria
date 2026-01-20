@@ -29,13 +29,14 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
+
 # 4. INITIALIZE THE BRAIN
 @st.cache_resource
 def load_victoria():
     victoria_retriever = get_retriever()
-    
+
     # Lower temperature for better grammar and professional tone
-    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.3) 
+    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.3)
 
     template = """You are Victoria, a professional Victorian Era Histographer. 
     Use the provided archives to answer the user's question. 
@@ -47,7 +48,9 @@ def load_victoria():
     
     Formal Historical Response:"""
 
-    QA_CHAIN_PROMPT = PromptTemplate(input_variables=["context", "question"], template=template)
+    QA_CHAIN_PROMPT = PromptTemplate(
+        input_variables=["context", "question"], template=template
+    )
 
     return RetrievalQA.from_chain_type(
         llm=llm,
@@ -56,6 +59,7 @@ def load_victoria():
         return_source_documents=True,
         chain_type_kwargs={"prompt": QA_CHAIN_PROMPT},
     )
+
 
 victoria_brain = load_victoria()
 
@@ -73,7 +77,7 @@ if prompt := st.chat_input("Ask about the Victorian Era..."):
     with st.chat_message("assistant"):
         # Check for simple greetings
         greetings = ["hello", "hi", "greetings", "good morning", "how are you"]
-        
+
         if prompt.lower().strip() in greetings:
             answer = "Good day to you! I am Victoria. How may I assist your historical research into the Victorian Era today?"
             st.markdown(answer)
@@ -84,11 +88,30 @@ if prompt := st.chat_input("Ask about the Victorian Era..."):
                     response = victoria_brain.invoke({"query": prompt})
                     answer = response["result"]
                     st.markdown(answer)
-                    
+
                     # Show evidence only if documents were found
                     if response.get("source_documents"):
                         with st.expander("📜 View Historical Evidence"):
                             citations = set()
                             for doc in response["source_documents"]:
-                                source_name = os.path.basename(doc.metadata.get("source", "Archive"))
-                                page = doc.metadata.get("page",
+                                source_name = os.path.basename(
+                                    doc.metadata.get("source", "Archive")
+                                )
+                                # FIXED LINE: Added closing parenthesis
+                                page = doc.metadata.get("page", "N/A")
+
+                                if isinstance(page, int):
+                                    page += 1
+                                citations.add(
+                                    f"**Source:** {source_name} (Page {page})"
+                                )
+
+                            for citation in sorted(citations):
+                                st.markdown(f"* {citation}")
+
+                except Exception as e:
+                    st.error(f"The telegraph lines are down.")
+                    answer = "My apologies, I cannot reach the records at this moment."
+
+    # Update session state with the assistant's answer
+    st.session_state.messages.append({"role": "assistant", "content": answer})

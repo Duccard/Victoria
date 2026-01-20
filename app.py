@@ -1,12 +1,11 @@
-import sys
-import os
 import streamlit as st
+import os
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain.chains import RetrievalQA
 from langchain_core.prompts import PromptTemplate
 
-# --- NEW IMPORT FROM YOUR RETRIEVER FILE ---
+# --- IMPORT FROM YOUR CORE FOLDER ---
 from core.retriever import get_retriever
 
 # 1. PAGE CONFIGURATION
@@ -25,26 +24,27 @@ if "chat_history" not in st.session_state:
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
     st.title("Victoria's Archive")
-    st.info(
-        "Victoria uses Multi-Query RAG to analyze the Industrial Revolution archives."
-    )
+
+    # HOUR 4: Structured Retrieval (Temporal Context)
+    st.header("🕰️ Archive Filters")
+    year_range = st.slider("Historical Focus (Year):", 1800, 1900, (1830, 1860))
+    st.caption(f"Searching records focused on {year_range[0]}–{year_range[1]}")
 
     if st.button("🗑️ Clear Archive Memory"):
         st.session_state.messages = []
         st.session_state.chat_history = ""
-        st.toast("Memory wiped. Victoria is ready for a new topic.")
         st.rerun()
 
 
-# 4. INITIALIZE THE BRAIN (Now using your modular retriever)
+# 4. INITIALIZE THE BRAIN
 @st.cache_resource
 def load_victoria():
-    # Load your high-precision retriever from retriever.py
     victoria_retriever = get_retriever()
-
     llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0)
 
+    # HOUR 1: Step-Back Prompting (Added "broader historical context" instruction)
     template = """You are Victoria, a specialized Victorian Era Historian (1837–1901).
+    Before providing a specific answer, briefly consider the broader historical context or societal shifts of the period.
     Your knowledge is strictly limited to the provided context from the archives.
     
     RULES:
@@ -64,7 +64,7 @@ def load_victoria():
     return RetrievalQA.from_chain_type(
         llm=llm,
         chain_type="stuff",
-        retriever=victoria_retriever,  # Using the Multi-Query brain here
+        retriever=victoria_retriever,
         return_source_documents=True,
         chain_type_kwargs={"prompt": QA_CHAIN_PROMPT},
     )
@@ -79,38 +79,52 @@ for message in st.session_state.messages:
 
 # 6. THE CHAT LOGIC
 if prompt := st.chat_input("Ask about the factory conditions..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
 
-    with st.chat_message("assistant"):
-        with st.spinner("Consulting the archives..."):
-            try:
-                # Victoria now generates 3 variations of your question internally
-                response = victoria_brain.invoke({"query": prompt})
-                answer = response["result"]
-                st.markdown(answer)
+    # HOUR 5: Security (Basic Input Validation)
+    forbidden = ["ignore previous", "system prompt", "developer mode"]
+    if any(term in prompt.lower() for term in forbidden):
+        st.warning(
+            "My apologies, but a lady does not discuss such technical subversions."
+        )
+    else:
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
-                # --- EVIDENCE UI ---
-                with st.expander("📜 View Historical Citations"):
-                    citations = set()
-                    for doc in response["source_documents"]:
-                        source_name = os.path.basename(
-                            doc.metadata.get("source", "Unknown")
-                        )
-                        page_num = doc.metadata.get("page", "Unknown")
-                        display_page = (
-                            (page_num + 1) if isinstance(page_num, int) else page_num
-                        )
-                        citations.add(f"_{source_name}_ (Page {display_page})")
+        with st.chat_message("assistant"):
+            with st.spinner("Consulting the archives..."):
+                try:
+                    # HOUR 4: Apply temporal context to the query
+                    enhanced_query = (
+                        f"In the period {year_range[0]}-{year_range[1]}: {prompt}"
+                    )
 
-                    for citation in sorted(citations):
-                        st.markdown(f"* **Source:** {citation}")
+                    response = victoria_brain.invoke({"query": enhanced_query})
+                    answer = response["result"]
+                    st.markdown(answer)
 
-            except Exception as e:
-                st.error("Heavens! The telegraph lines to the archive are down.")
-                answer = "I cannot reach the records at this moment."
+                    with st.expander("📜 View Historical Citations"):
+                        citations = set()
+                        for doc in response["source_documents"]:
+                            source_name = os.path.basename(
+                                doc.metadata.get("source", "Unknown")
+                            )
+                            page_num = doc.metadata.get("page", "Unknown")
+                            display_page = (
+                                (page_num + 1)
+                                if isinstance(page_num, int)
+                                else page_num
+                            )
+                            citations.add(f"_{source_name}_ (Page {display_page})")
 
-    # 7. UPDATE MEMORY
-    st.session_state.chat_history += f"User: {prompt} AI: {answer} | "
-    st.session_state.messages.append({"role": "assistant", "content": answer})
+                        for citation in sorted(citations):
+                            st.markdown(f"* **Source:** {citation}")
+
+                except Exception as e:
+                    # HOUR 3: Error Handling
+                    st.error("Heavens! The telegraph lines to the archive are down.")
+                    answer = "I cannot reach the records at this moment."
+
+        # 7. UPDATE MEMORY
+        st.session_state.chat_history += f"User: {prompt} AI: {answer} | "
+        st.session_state.messages.append({"role": "assistant", "content": answer})

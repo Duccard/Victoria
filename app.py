@@ -77,15 +77,34 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# 6. THE CHAT LOGIC
+# 6. THE SIMPLIFIED CHAT LOGIC
 if prompt := st.chat_input("Ask about the factory conditions..."):
 
-    # HOUR 5: Security (Basic Input Validation)
+    # Validation 1: Security & Topic Guardrail (Do this FIRST)
     forbidden = ["ignore previous", "system prompt", "developer mode"]
+    is_victorian = any(
+        word in prompt.lower()
+        for word in [
+            "victorian",
+            "1800",
+            "19th",
+            "revolution",
+            "factory",
+            "industrial",
+            "queen",
+            "era",
+        ]
+    )
+
     if any(term in prompt.lower() for term in forbidden):
-        st.warning(
-            "My apologies, but a lady does not discuss such technical subversions."
+        st.warning("I cannot discuss technical subversions, sir.")
+
+    elif not is_victorian:
+        # If the user asks about Rome or 2024, stop here before wasting API credits
+        st.info(
+            "My expertise is strictly limited to the Victorian Era (1837–1901). Please rephrase your query."
         )
+
     else:
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -94,13 +113,15 @@ if prompt := st.chat_input("Ask about the factory conditions..."):
         with st.chat_message("assistant"):
             with st.spinner("Consulting the archives..."):
                 try:
-                    # HOUR 4: Apply temporal context to the query
-                    enhanced_query = (
-                        f"In the period {year_range[0]}-{year_range[1]}: {prompt}"
-                    )
-
-                    response = victoria_brain.invoke({"query": enhanced_query})
+                    # SIMPLIFIED QUERY: We just pass the prompt.
+                    # The slider now purely acts as a "user reminder" rather than a hard code filter.
+                    response = victoria_brain.invoke({"query": prompt})
                     answer = response["result"]
+
+                    # Double-check: If the LLM still gives a "decline" message despite passing validation
+                    if "I'm sorry" in answer and "Victorian" in prompt:
+                        answer = "The archives are a bit dusty on that specific detail, but based on the Industrial Revolution records..."
+
                     st.markdown(answer)
 
                     with st.expander("📜 View Historical Citations"):
@@ -116,14 +137,12 @@ if prompt := st.chat_input("Ask about the factory conditions..."):
                                 else page_num
                             )
                             citations.add(f"_{source_name}_ (Page {display_page})")
-
                         for citation in sorted(citations):
                             st.markdown(f"* **Source:** {citation}")
 
                 except Exception as e:
-                    # HOUR 3: Error Handling
-                    st.error("Heavens! The telegraph lines to the archive are down.")
-                    answer = "I cannot reach the records at this moment."
+                    st.error("The telegraph lines are down.")
+                    answer = "Connection lost."
 
         # 7. UPDATE MEMORY
         st.session_state.chat_history += f"User: {prompt} AI: {answer} | "

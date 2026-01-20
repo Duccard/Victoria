@@ -18,42 +18,39 @@ CHROMA_PATH: str = "chroma_db/"
 
 
 def ingest_docs() -> Chroma:
-    """
-    Reads all supported files in the data directory, splits them into chunks,
-    and persists them into a Chroma vector database.
-
-    Returns:
-        Chroma: The initialized and persisted vector store containing the document embeddings.
-    """
     print("--- Starting Ingestion ---")
-
-    # 1. Load Documents (PDFs and CSVs)
     documents: List[Document] = []
 
-    # Load PDFs using a directory loader
+    # 1. Load PDFs (Updated to ensure Page Numbers are kept)
     if any(f.endswith(".pdf") for f in os.listdir(DATA_PATH)):
-        pdf_loader = DirectoryLoader(DATA_PATH, glob="./*.pdf", loader_cls=PyPDFLoader)
+        pdf_loader = DirectoryLoader(
+            DATA_PATH,
+            glob="./*.pdf",
+            loader_cls=PyPDFLoader,  # This keeps the page numbers!
+            show_progress=True,
+        )
         documents.extend(pdf_loader.load())
 
-    # Load CSV (Specifically the Inventions/Patents file)
+    # 2. Load CSV
     csv_file_path = os.path.join(DATA_PATH, "key_inventions.csv")
     if os.path.exists(csv_file_path):
         csv_loader = CSVLoader(csv_file_path)
         documents.extend(csv_loader.load())
 
-    # 2. Advanced Chunking
-    # Using 1000 characters to maintain sufficient historical context per chunk
+    # 3. Advanced Chunking
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000, chunk_overlap=150, separators=["\n\n", "\n", ".", " "]
+        chunk_size=1000,
+        chunk_overlap=150,
+        add_start_index=True,  # Crucial for pinpointing text location
     )
-    chunks: List[Document] = text_splitter.split_documents(documents)
+    chunks = text_splitter.split_documents(documents)
 
-    # 3. Create and Persist Vector Store
+    # 4. Create Vector Store
     vector_db = Chroma.from_documents(
         documents=chunks, embedding=OpenAIEmbeddings(), persist_directory=CHROMA_PATH
     )
 
-    print(f"--- Success: Ingested {len(chunks)} chunks into {CHROMA_PATH} ---")
+    print(f"--- Success: Ingested {len(chunks)} chunks ---")
     return vector_db
 
 

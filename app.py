@@ -8,7 +8,7 @@ import os
 
 # 1. PAGE CONFIGURATION
 st.set_page_config(page_title="Victoria: Victorian Historian", page_icon="👑")
-st.title("📜 Victoria: RAG Historian")
+st.title("👑 Victoria: Industrial Revolution Historian")
 
 load_dotenv()
 

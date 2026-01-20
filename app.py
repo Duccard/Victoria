@@ -1,5 +1,8 @@
-import streamlit as st
+import sys
 import os
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import streamlit as st
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain.chains import RetrievalQA

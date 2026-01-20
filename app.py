@@ -34,7 +34,7 @@ with st.sidebar:
 def load_victoria():
     victoria_retriever = get_retriever()
     
-    # Lower temperature for better grammar
+    # Lower temperature for better grammar and professional tone
     llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.3) 
 
     template = """You are Victoria, a professional Victorian Era Histographer. 
@@ -64,7 +64,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# 6. REFINED CHAT LOGIC (Includes Greeting Filter)
+# 6. REFINED CHAT LOGIC
 if prompt := st.chat_input("Ask about the Victorian Era..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -80,4 +80,15 @@ if prompt := st.chat_input("Ask about the Victorian Era..."):
         else:
             with st.spinner("Searching the Royal Archives..."):
                 try:
-                    response = victoria_brain
+                    # Run the RAG chain
+                    response = victoria_brain.invoke({"query": prompt})
+                    answer = response["result"]
+                    st.markdown(answer)
+                    
+                    # Show evidence only if documents were found
+                    if response.get("source_documents"):
+                        with st.expander("📜 View Historical Evidence"):
+                            citations = set()
+                            for doc in response["source_documents"]:
+                                source_name = os.path.basename(doc.metadata.get("source", "Archive"))
+                                page = doc.metadata.get("page",

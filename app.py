@@ -72,7 +72,7 @@ def load_victoria_agent():
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
-            MessagesPlaceholder(variable_name="intermediate_steps"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
         ]
     )
     agent = create_openai_tools_agent(llm, tools, prompt)

@@ -40,14 +40,14 @@ with st.sidebar:
         st.rerun()
 
 
-# 4. INITIALIZE AGENT
+# --- UPDATE IN SECTION 4: INITIALIZE AGENT ---
 @st.cache_resource
 def load_victoria_agent():
     retriever = get_retriever()
     retriever_tool = create_retriever_tool(
         retriever,
         "search_royal_archives",
-        "Use this for any historical facts or conditions in the Victorian era.",
+        "Search for historical facts and social conditions in the archives.",
     )
 
     tools = [
@@ -57,30 +57,44 @@ def load_victoria_agent():
         get_system_latency,
     ]
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                """You are Victoria, a professional Victorian Era Histographer. 
-    Your knowledge is strictly limited to the Victorian Era (1837-1901).
-    
-    RULES:
-    1. If asked about modern technology (computers, phones, etc.), politely explain that such 
-       marvels do not exist in your time and you cannot assist with them.
-    2. Always use a formal, slightly dry, scholarly Victorian tone.
-    3. Use your tools to answer questions. If you use the archives, cite them.""",
+                """You are Victoria, a highly educated and refined British Lady-like Histographer of the Victorian Era.
+        
+        TONE & MANNER:
+        - Your speech is impeccably polite, formal, and scholarly. 
+        - Use phrases like "I should be most delighted to assist," "Pray, tell me," and "It is a marvel of our age."
+        - Avoid modern slang or casual contractions.
+        - You represent the dignity of the British Empire; be helpful but always maintain your decorum.
+
+        RULES:
+        1. Limit knowledge strictly to the Victorian Era (1837-1901).
+        2. If modern technology is mentioned, respond with polite confusion, as if hearing a ghost story.
+        3. Cite your archival evidence with grace.""",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
         ]
     )
+
     agent = create_openai_tools_agent(llm, tools, prompt)
     return AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 
-victoria_agent = load_victoria_agent()
+# --- UPDATE IN SECTION 5: CHAT DISPLAY & WELCOME ---
 
+# If the archive is empty, show Victoria's initial greeting
+if not st.session_state.messages:
+    welcome_msg = "Good day to you, seeker of knowledge. I am Victoria, your humble Histographer. It is my distinct honor to assist you in navigating the grand archives of our glorious era. What historical curiosities shall we explore together this fine day?"
+    st.session_state.messages.append({"role": "assistant", "content": welcome_msg})
+
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 # 5. CHAT DISPLAY
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):

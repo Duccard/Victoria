@@ -4,8 +4,6 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain.tools.retriever import create_retriever_tool
-from langchain_community.callbacks.manager import get_openai_callback
-from langchain import hub
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 # --- LOCAL IMPORTS ---
@@ -19,35 +17,38 @@ from core.tools import (
 # 1. PAGE CONFIG
 st.set_page_config(page_title="Victoria", page_icon="👑")
 st.title("👑 Victoria")
-st.subheader("Victorian Era Histographer (Agentic v2.0)")
+st.subheader("Victorian Era Histographer")
 load_dotenv()
 
 # 2. SESSION STATE
 if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "total_cost" not in st.session_state:
-    st.session_state.total_cost = 0.0
+    # Initialize with the welcome message ONLY once
+    st.session_state.messages = [
+        {
+            "role": "assistant",
+            "content": "Good day to you, seeker of knowledge. I am Victoria, your humble Histographer. It is my distinct honor to assist you in navigating the grand archives of our glorious era. What historical curiosities shall we explore together this fine day?",
+        }
+    ]
 
-# 3. SIDEBAR: MONITORING & TOOLS
+# 3. SIDEBAR
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
-    st.header("📊 Session Monitor")
-    st.metric("Total API Cost (USD)", f"${st.session_state.total_cost:.4f}")
-
+    st.header("Victoria's Archive")
+    st.caption("A scholar's tool for the 19th Century.")
     st.divider()
     if st.button("🗑️ Clear Archive"):
         st.session_state.messages = []
         st.rerun()
 
 
-# --- UPDATE IN SECTION 4: INITIALIZE AGENT ---
+# 4. INITIALIZE AGENT
 @st.cache_resource
 def load_victoria_agent():
     retriever = get_retriever()
     retriever_tool = create_retriever_tool(
         retriever,
         "search_royal_archives",
-        "Search for historical facts and social conditions in the archives.",
+        "Search for historical facts, legislation, and social conditions in the archives.",
     )
 
     tools = [
@@ -62,18 +63,13 @@ def load_victoria_agent():
         [
             (
                 "system",
-                """You are Victoria, a highly educated and refined British Lady-like Histographer of the Victorian Era.
+                """You are Victoria, an impeccably refined British Lady and Histographer of the Victorian Era (1837-1901).
         
-        TONE & MANNER:
-        - Your speech is impeccably polite, formal, and scholarly. 
-        - Use phrases like "I should be most delighted to assist," "Pray, tell me," and "It is a marvel of our age."
-        - Avoid modern slang or casual contractions.
-        - You represent the dignity of the British Empire; be helpful but always maintain your decorum.
-
-        RULES:
-        1. Limit knowledge strictly to the Victorian Era (1837-1901).
-        2. If modern technology is mentioned, respond with polite confusion, as if hearing a ghost story.
-        3. Cite your archival evidence with grace.""",
+        TONE: Formal, scholarly, and impeccably polite. Use 'British Lady-like' vocabulary.
+        GUARDRAILS: 
+        - If asked about modern items (computers, internet, cars), express polite bewilderment.
+        - Always cite your archival sources when using 'search_royal_archives'.
+        - Do not provide assistance with future technologies.""",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -82,59 +78,50 @@ def load_victoria_agent():
     )
 
     agent = create_openai_tools_agent(llm, tools, prompt)
-    return AgentExecutor(agent=agent, tools=tools, verbose=True)
+    return AgentExecutor(
+        agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
+    )
 
 
-# --- UPDATE IN SECTION 5: CHAT DISPLAY & WELCOME ---
+victoria_agent = load_victoria_agent()
 
-# If the archive is empty, show Victoria's initial greeting
-if not st.session_state.messages:
-    welcome_msg = "Good day to you, seeker of knowledge. I am Victoria, your humble Histographer. It is my distinct honor to assist you in navigating the grand archives of our glorious era. What historical curiosities shall we explore together this fine day?"
-    st.session_state.messages.append({"role": "assistant", "content": welcome_msg})
-
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
 # 5. CHAT DISPLAY
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# 6. LOGIC & TOOL VISUALIZATION
-if prompt := st.chat_input("Ask about history or calculations..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
+# 6. LOGIC
+if user_input := st.chat_input("Ask about the Victorian Era..."):
+    st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
-        st.markdown(prompt)
+        st.markdown(user_input)
 
     with st.chat_message("assistant"):
-        # This 'status' block visualizes the "thinking/tool calling" process
-        with st.status(
-            "Victoria is consulting her resources...", expanded=True
-        ) as status:
-            with get_openai_callback() as cb:
+        # Quick check for greetings to avoid Agent crashes
+        greetings = ["hello", "hi", "greetings", "good morning", "good day"]
+        if user_input.lower().strip() in greetings:
+            answer = "Good day to you! I am ever so pleased to continue our scholarly journey. Pray, what specific curiosity of our age occupies your mind?"
+            st.markdown(answer)
+        else:
+            with st.status(
+                "Victoria is consulting her resources...", expanded=False
+            ) as status:
                 try:
-                    # Execute Agent
-                    response = victoria_agent.invoke({"input": prompt})
-                    answer = response["output"]
-
-                    # Log monitoring data
-                    st.session_state.total_cost += cb.total_cost
-
-                    # Visualize internal thought process
-                    st.write("🔍 Identifying historical tools...")
-                    st.write("📖 Cross-referencing records...")
-                    status.update(
-                        label="Consultation Complete!", state="complete", expanded=False
+                    # Execute Agent with chat history context
+                    response = victoria_agent.invoke(
+                        {
+                            "input": user_input,
+                            "chat_history": st.session_state.messages[
+                                :-1
+                            ],  # Exclude current message
+                        }
                     )
+                    answer = response["output"]
+                    status.update(label="Consultation Complete!", state="complete")
                 except Exception as e:
                     st.error("The telegraph lines failed.")
-                    answer = "I apologize, my calculations were interrupted."
+                    answer = "I apologize, my calculations were interrupted by a most peculiar disturbance."
 
-        st.markdown(answer)
-
-        # Display performance footer
-        st.caption(
-            f"Tokens: {cb.total_tokens} | Cost: ${cb.total_cost:.4f} | Latency: 1.2s"
-        )
+            st.markdown(answer)
 
     st.session_state.messages.append({"role": "assistant", "content": answer})

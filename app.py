@@ -30,49 +30,30 @@ if "messages" not in st.session_state:
         }
     ]
 
-# --- IMPROVED SIDEBAR ---
+# --- STABLE & SIMPLE SIDEBAR ---
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
-    st.title("The Histographer's Bureau")
-
-    # 1. Historical Context Widget
-    st.info("📅 Current Era: **High Victorian (c. 1850)**")
+    st.title("Research Log")
+    st.caption("A record of our scholarly correspondence.")
 
     st.divider()
 
-    # 2. Topic Stamps (Quick Actions)
-    st.subheader("📌 Topic Stamps")
-    st.caption("Press a stamp to focus the archives:")
+    # Display a simple list of past questions
+    if len(st.session_state.messages) > 1:
+        st.subheader("Previous Inquiries")
+        # Loop through messages and display only the user's questions
+        for msg in st.session_state.messages:
+            if msg["role"] == "user":
+                st.write(f"📜 {msg['content'][:40]}...")
+    else:
+        st.info("The log is currently empty. Pray, ask a question.")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🚂 Industry"):
-            st.session_state.messages.append(
-                {
-                    "role": "user",
-                    "content": "Tell me of the great industrial advancements.",
-                }
-            )
-            # This triggers the agent to respond automatically on the next rerun
-    with col2:
-        if st.button("⚖️ Legislation"):
-            st.session_state.messages.append(
-                {"role": "user", "content": "What new laws protect the workers?"}
-            )
+    st.divider()
 
-    with col1:
-        if st.button("🧤 Social Life"):
-            st.session_state.messages.append(
-                {"role": "user", "content": "How do the classes mingle in London?"}
-            )
-    with col2:
-        if st.button("💷 Economy"):
-            st.session_state.messages.append(
-                {
-                    "role": "user",
-                    "content": "Explain the current state of British trade.",
-                }
-            )
+    # The only functional button to keep it bug-free
+    if st.button("🗑️ Clear Archive"):
+        st.session_state.messages = []
+        st.rerun()
 
     st.divider()
 

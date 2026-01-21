@@ -30,13 +30,63 @@ if "messages" not in st.session_state:
         }
     ]
 
-# 3. SIDEBAR
+# --- IMPROVED SIDEBAR ---
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
-    st.header("Victoria's Archive")
-    st.caption("A scholar's tool for the 19th Century.")
+    st.title("The Histographer's Bureau")
+
+    # 1. Historical Context Widget
+    st.info("📅 Current Era: **High Victorian (c. 1850)**")
+
     st.divider()
-    if st.button("🗑️ Clear Archive"):
+
+    # 2. Topic Stamps (Quick Actions)
+    st.subheader("📌 Topic Stamps")
+    st.caption("Press a stamp to focus the archives:")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🚂 Industry"):
+            st.session_state.messages.append(
+                {
+                    "role": "user",
+                    "content": "Tell me of the great industrial advancements.",
+                }
+            )
+            # This triggers the agent to respond automatically on the next rerun
+    with col2:
+        if st.button("⚖️ Legislation"):
+            st.session_state.messages.append(
+                {"role": "user", "content": "What new laws protect the workers?"}
+            )
+
+    with col1:
+        if st.button("🧤 Social Life"):
+            st.session_state.messages.append(
+                {"role": "user", "content": "How do the classes mingle in London?"}
+            )
+    with col2:
+        if st.button("💷 Economy"):
+            st.session_state.messages.append(
+                {
+                    "role": "user",
+                    "content": "Explain the current state of British trade.",
+                }
+            )
+
+    st.divider()
+
+    # 3. Archive Insights
+    st.subheader("📂 Archive Statistics")
+    # We can count the documents in your data folder
+    num_docs = len([f for f in os.listdir("data") if f.endswith(".pdf")])
+    st.write(f"Volumes Indexed: **{num_docs}**")
+    st.write("Retriever: **Multi-Query Active**")
+
+    st.divider()
+
+    # 4. Maintenance
+    if st.button("🗑️ Clear Research Log"):
         st.session_state.messages = []
         st.rerun()
 

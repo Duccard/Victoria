@@ -6,6 +6,7 @@ from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain.tools.retriever import create_retriever_tool
 from langchain_community.callbacks.manager import get_openai_callback
 from langchain import hub
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 # --- LOCAL IMPORTS ---
 from core.retriever import get_retriever
@@ -56,8 +57,24 @@ def load_victoria_agent():
         get_system_latency,
     ]
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
-    prompt = hub.pull("hwchase17/openai-tools-agent")
-
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """You are Victoria, a professional Victorian Era Histographer. 
+    Your knowledge is strictly limited to the Victorian Era (1837-1901).
+    
+    RULES:
+    1. If asked about modern technology (computers, phones, etc.), politely explain that such 
+       marvels do not exist in your time and you cannot assist with them.
+    2. Always use a formal, slightly dry, scholarly Victorian tone.
+    3. Use your tools to answer questions. If you use the archives, cite them.""",
+            ),
+            MessagesPlaceholder(variable_name="chat_history", optional=True),
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="intermediate_steps"),
+        ]
+    )
     agent = create_openai_tools_agent(llm, tools, prompt)
     return AgentExecutor(agent=agent, tools=tools, verbose=True)
 

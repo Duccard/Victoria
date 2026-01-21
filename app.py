@@ -4,6 +4,13 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain.chains import RetrievalQA
 from langchain_core.prompts import PromptTemplate
+from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langchain.tools.retriever import create_retriever_tool
+from core.tools import (
+    victorian_currency_converter,
+    industry_stats_calculator,
+    get_era_latency_check,
+)
 
 # --- IMPORT FROM YOUR CORE FOLDER ---
 from core.retriever import get_retriever
@@ -32,33 +39,39 @@ with st.sidebar:
 
 # 4. INITIALIZE THE BRAIN
 @st.cache_resource
-def load_victoria():
-    victoria_retriever = get_retriever()
+def load_victoria_agent():
+    retriever = get_retriever()
 
-    # Lower temperature for better grammar and professional tone
-    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.3)
-
-    template = """You are Victoria, a professional Victorian Era Histographer. 
-    Use the provided archives to answer the user's question. 
-    If the context doesn't have the answer, state that the archives are silent on the matter, 
-    but provide a brief response based on general historical knowledge.
-
-    Context: {context}
-    Question: {question}
-    
-    Formal Historical Response:"""
-
-    QA_CHAIN_PROMPT = PromptTemplate(
-        input_variables=["context", "question"], template=template
+    # 1. Turn your RAG into a Tool
+    retriever_tool = create_retriever_tool(
+        retriever,
+        "search_royal_archives",
+        "Search for historical facts, social conditions, and industrial data in the archives.",
     )
 
-    return RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=victoria_retriever,
-        return_source_documents=True,
-        chain_type_kwargs={"prompt": QA_CHAIN_PROMPT},
+    # 2. Combine all tools
+    tools = [
+        retriever_tool,
+        victorian_currency_converter,
+        industry_stats_calculator,
+        get_era_latency_check,
+    ]
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+
+    # 3. Use a standard Agent Prompt
+    from langchain import hub
+
+    prompt = hub.pull("hwchase17/openai-tools-agent")
+
+    # 4. Create the Agent
+    agent = create_openai_tools_agent(llm, tools, prompt)
+    return AgentExecutor(
+        agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
     )
+
+
+victoria_agent = load_victoria_agent()
 
 
 victoria_brain = load_victoria()

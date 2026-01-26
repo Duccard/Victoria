@@ -70,13 +70,12 @@ def search_royal_archives(query: str):
     docs = retriever.invoke(query)
 
     evidence_list = []
-    seen = set()  # To avoid duplicate source/page entries
+    seen = set()
     for d in docs:
         fname = os.path.basename(d.metadata.get("source", ""))
         title = SOURCE_TITLES.get(fname, fname)
         page = d.metadata.get("page", "N/A")
 
-        # Unique identifier to keep the table minimal
         ref = f"{title}-{page}"
         if ref not in seen:
             evidence_list.append({"Source Title": title, "Page": page})
@@ -91,4 +90,66 @@ def search_royal_archives(query: str):
 # 6. AGENT SETUP
 @st.cache_resource
 def load_victoria():
-    from core.tools import victorian_currency_converter, industry_stats
+    from core.tools import victorian_currency_converter, industry_stats_calculator
+
+    tools = [
+        search_royal_archives,
+        victorian_currency_converter,
+        industry_stats_calculator,
+    ]
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "You are Victoria, a formal British Histographer. Use search_royal_archives for history.",
+            ),
+            MessagesPlaceholder(variable_name="chat_history", optional=True),
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
+        ]
+    )
+    agent = create_openai_tools_agent(llm, tools, prompt)
+    return AgentExecutor(agent=agent, tools=tools, verbose=True)
+
+
+victoria = load_victoria()
+
+# 7. MAIN INTERFACE
+st.title("👑 Victoria: Histographer Agent")
+
+# Render History
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+# --- 8. MINIMAL EVIDENCE TABLE ---
+if st.session_state.last_evidence:
+    with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
+        st.table(st.session_state.last_evidence)
+
+# Input Box
+st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
+
+# 9. LOGIC
+if "pending_input" in st.session_state and st.session_state.pending_input:
+    current_input = st.session_state.pop("pending_input")
+
+    greetings = ["hello", "hi", "greetings", "good day"]
+    if current_input.lower().strip() in greetings:
+        answer = "Good day! How may I assist your research into our glorious era?"
+    else:
+        with st.chat_message("assistant"):
+            with st.status("Searching the Royal Archives...", expanded=True) as status:
+                response = victoria.invoke(
+                    {
+                        "input": f"{current_input}. Cite archival sources.",
+                        "chat_history": st.session_state.messages[:-1],
+                    }
+                )
+                answer = response["output"]
+                status.update(label="Consultation Complete", state="complete")
+            st.markdown(answer)
+
+    st.session_state.messages.append({"role": "assistant", "content": answer})
+    st.rerun()

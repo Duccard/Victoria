@@ -10,8 +10,7 @@ from langchain.tools import tool
 st.set_page_config(page_title="Victoria", page_icon="👑", layout="wide")
 load_dotenv()
 
-# --- SOURCE MAPPING DICTIONARY ---
-# Map your PDF filenames to formal titles for the UI
+# --- SOURCE TITLES DICTIONARY ---
 SOURCE_TITLES = {
     "20-Industrial-Rev.pdf": "The Industrial Revolution Archives (Vol. 20)",
     "Chapter-8-The-Industrial-Revolution.pdf": "British Industrial History, Chapter VIII",
@@ -31,12 +30,14 @@ if "last_evidence" not in st.session_state:
     st.session_state.last_evidence = []
 
 
-# --- 3. THE INSTANT SIDEBAR FIX ---
+# --- 3. THE INSTANT SIDEBAR FIX (CALLBACK) ---
 def handle_input():
     if st.session_state.user_text:
         new_prompt = st.session_state.user_text
         st.session_state.messages.append({"role": "user", "content": new_prompt})
         st.session_state.pending_input = new_prompt
+        # Reset evidence so the table doesn't show old data while thinking
+        st.session_state.last_evidence = []
         st.session_state.user_text = ""
 
 
@@ -67,17 +68,28 @@ def search_royal_archives(query: str):
     """MANDATORY: Consult this for any factual historical claims or evidence."""
     retriever = get_retriever()
     docs = retriever.invoke(query)
-    st.session_state.last_evidence = docs  # Store for the Table
 
-    results = []
+    evidence_list = []
     for d in docs:
         fname = os.path.basename(d.metadata.get("source", ""))
-        source_name = SOURCE_TITLES.get(fname, fname)  # Use pretty name if exists
-        page = d.metadata.get("page", "N/A")
-        results.append(
-            f"SOURCE: {source_name} (Page {page})\nCONTENT: {d.page_content}"
+        evidence_list.append(
+            {
+                "Source Title": SOURCE_TITLES.get(fname, fname),
+                "Page": d.metadata.get("page", "N/A"),
+                "Excerpt": f"{d.page_content[:300]}...",
+            }
         )
-    return "\n\n".join(results)
+
+    # Save to session state so it persists after the agent finishes
+    st.session_state.last_evidence = evidence_list
+
+    # Return string for the Agent to process
+    return "\n\n".join(
+        [
+            f"SOURCE: {e['Source Title']} (Page {e['Page']})\nCONTENT: {e['Excerpt']}"
+            for e in evidence_list
+        ]
+    )
 
 
 # 6. AGENT SETUP
@@ -95,7 +107,7 @@ def load_victoria():
         [
             (
                 "system",
-                "You are Victoria, a formal British Histographer. Use search_royal_archives for history. Speak refined British English.",
+                "You are Victoria, a formal British Histographer. You MUST use search_royal_archives for history. Cite sources in text and wait for tool results.",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -110,52 +122,40 @@ victoria = load_victoria()
 
 # 7. MAIN INTERFACE
 st.title("👑 Victoria: Histographer Agent")
+
+# Render History
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
+# --- 8. PERSISTENT EVIDENCE TABLE (PLACEMENT IS KEY) ---
+if st.session_state.last_evidence:
+    with st.expander("📝 VIEW ARCHIVAL EVIDENCE", expanded=True):
+        st.table(st.session_state.last_evidence)
+
 st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 
-# 8. AGENT EXECUTION LOGIC
+# 9. AGENT EXECUTION LOGIC
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
-    # 1. Check for Greetings
     greetings = ["hello", "hi", "greetings", "good day"]
     if current_input.lower().strip() in greetings:
         answer = "Good day! How may I assist your research into our glorious era?"
-        st.session_state.last_evidence = []
     else:
-        # 2. Process Historical Question
         with st.chat_message("assistant"):
-            st.session_state.last_evidence = []
             with st.status("Searching the Royal Archives...", expanded=True) as status:
+                # Force tool usage through the input string
                 response = victoria.invoke(
                     {
-                        "input": f"{current_input}. Cite sources.",
+                        "input": f"{current_input}. Search the archives for evidence.",
                         "chat_history": st.session_state.messages[:-1],
                     }
                 )
                 answer = response["output"]
                 status.update(label="Consultation Complete", state="complete")
-
             st.markdown(answer)
 
-            # 3. RENDER EVIDENCE TABLE
-            if st.session_state.last_evidence:
-                with st.expander("📝 VIEW ARCHIVAL EVIDENCE", expanded=True):
-                    # Prepare data for the table
-                    table_data = []
-                    for doc in st.session_state.last_evidence:
-                        raw_name = os.path.basename(doc.metadata.get("source", ""))
-                        table_data.append(
-                            {
-                                "Source Title": SOURCE_TITLES.get(raw_name, raw_name),
-                                "Page": doc.metadata.get("page", "N/A"),
-                                "Excerpt": f"{doc.page_content[:200]}...",
-                            }
-                        )
-                    st.table(table_data)
-
+    # Final update and refresh
     st.session_state.messages.append({"role": "assistant", "content": answer})
     st.rerun()

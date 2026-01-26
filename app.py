@@ -15,21 +15,19 @@ if "messages" not in st.session_state:
     st.session_state.messages = [
         {
             "role": "assistant",
-            "content": "Good day to you, seeker of knowledge. I am Victoria, your humble Histographer. What historical curiosities shall we explore together this fine day?",
+            "content": "Good day to you, seeker of knowledge. I am Victoria, your humble Histographer. How may I assist your research today?",
         }
     ]
 if "last_evidence" not in st.session_state:
     st.session_state.last_evidence = []
 
 
-# --- 3. THE INSTANT SIDEBAR FIX (CALLBACK) ---
+# --- 3. THE INSTANT SIDEBAR FIX ---
 def handle_input():
     if st.session_state.user_text:
-        # Update session state BEFORE the script reruns
         new_prompt = st.session_state.user_text
         st.session_state.messages.append({"role": "user", "content": new_prompt})
         st.session_state.pending_input = new_prompt
-        # Clear the input box immediately
         st.session_state.user_text = ""
 
 
@@ -37,18 +35,12 @@ def handle_input():
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
     st.title("📜 Research Log")
-    st.caption("A record of our scholarly correspondence.")
     st.divider()
-
-    # Display every user message in the log (now perfectly synced)
     user_queries = [
         m["content"] for m in st.session_state.messages if m["role"] == "user"
     ]
-    if user_queries:
-        for i, query in enumerate(user_queries):
-            st.caption(f"{i+1}. {query[:40]}...")
-    else:
-        st.info("The log is empty.")
+    for i, query in enumerate(user_queries):
+        st.caption(f"{i+1}. {query[:40]}...")
 
     st.divider()
     if st.button("🗑️ Reset Archive"):
@@ -64,16 +56,15 @@ from core.retriever import get_retriever
 
 @tool
 def search_royal_archives(query: str):
-    """MANDATORY: Consult this for any factual historical claims or evidence from the Victorian era."""
+    """MANDATORY: Consult this for any factual historical claims or evidence."""
     retriever = get_retriever()
     docs = retriever.invoke(query)
-
-    # Store evidence globally so the UI can catch it after the tool call finishes
+    # CRITICAL: Store evidence in session state for the UI to see
     st.session_state.last_evidence = docs
 
     results = []
     for d in docs:
-        source = d.metadata.get("source", "Unknown Archive")
+        source = os.path.basename(d.metadata.get("source", "Unknown Archive"))
         page = d.metadata.get("page", "N/A")
         results.append(f"SOURCE: {source} (Page {page})\nCONTENT: {d.page_content}")
     return "\n\n".join(results)
@@ -95,9 +86,11 @@ def load_victoria():
         [
             (
                 "system",
-                """You are Victoria, a formal British Histographer. 
-                You MUST use search_royal_archives for any historical inquiry to provide evidence. 
-                Always cite your sources with (Source Name, Page Number).""",
+                """You are Victoria, an impeccably refined British Lady and Histographer.
+        RULES:
+        1. For historical topics (Steam engines, Mines Act, etc.), you MUST use 'search_royal_archives'.
+        2. Always cite your sources in the text as (Source, Page).
+        3. Maintain a formal, scholarly Victorian tone.""",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -114,53 +107,46 @@ victoria = load_victoria()
 
 # 7. MAIN INTERFACE
 st.title("👑 Victoria: Histographer Agent")
-
-# Render existing chat history
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# Input Box with Callback for Instant Feedback
 st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 
 # 8. AGENT EXECUTION LOGIC
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
-    with st.chat_message("assistant"):
-        # Reset evidence list before the new search
-        st.session_state.last_evidence = []
+    # Check for basic interactions first
+    greetings = ["hello", "hi", "greetings", "good day", "how are you"]
+    if current_input.lower().strip() in greetings:
+        answer = "Good day to you! I am delighted by your presence. Pray, what specific historical curiosity shall we explore from our grand archives?"
+        st.session_state.last_evidence = []  # No evidence for greetings
+    else:
+        with st.chat_message("assistant"):
+            st.session_state.last_evidence = []  # Clear old evidence
+            with st.status("Consulting the Royal Archives...", expanded=True) as status:
+                # Force the agent to use the tool
+                response = victoria.invoke(
+                    {
+                        "input": f"{current_input}. Search the archives for details.",
+                        "chat_history": st.session_state.messages[:-1],
+                    }
+                )
+                answer = response["output"]
+                status.update(label="Consultation Complete", state="complete")
 
-        with st.status("Searching the Royal Archives...", expanded=True) as status:
-            # Force the agent to look for evidence even on general topics
-            enhanced_input = f"{current_input}. (Please verify this in the royal archives and provide page references.)"
+            st.markdown(answer)
 
-            response = victoria.invoke(
-                {
-                    "input": enhanced_input,
-                    "chat_history": st.session_state.messages[:-1],
-                }
-            )
-            status.update(label="Consultation Complete", state="complete")
+            # THE EVIDENCE BAR (Restored and Fixed)
+            if st.session_state.last_evidence:
+                with st.expander("📝 Archival Evidence Detected", expanded=True):
+                    for doc in st.session_state.last_evidence:
+                        src = os.path.basename(doc.metadata.get("source", "Archive"))
+                        pg = doc.metadata.get("page", "N/A")
+                        st.write(f"📖 **{src}** — *Page {pg}*")
+                        st.caption(f'"{doc.page_content[:400]}..."')
+                        st.divider()
 
-        st.markdown(response["output"])
-
-        # THE EVIDENCE VISUAL: Display if metadata was found
-        if st.session_state.last_evidence:
-            with st.expander("📝 Archival Evidence & Page References", expanded=True):
-                for doc in st.session_state.last_evidence:
-                    source_file = os.path.basename(
-                        doc.metadata.get("source", "Archive Record")
-                    )
-                    page_val = doc.metadata.get("page", "N/A")
-                    st.write(f"📖 **Source:** {source_file} | **Page:** {page_val}")
-                    st.caption(f'"{doc.page_content[:450]}..."')
-                    st.divider()
-
-        # Update session state history
-        st.session_state.messages.append(
-            {"role": "assistant", "content": response["output"]}
-        )
-
-        # Final rerun to ensure everything is synced
-        st.rerun()
+    st.session_state.messages.append({"role": "assistant", "content": answer})
+    st.rerun()

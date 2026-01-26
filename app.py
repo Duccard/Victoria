@@ -57,11 +57,11 @@ def handle_input():
         )
         st.session_state.pending_input = new_prompt
         st.session_state.temp_evidence = []
-        st.session_state.focus_theme = None  # Clear focus on new question
+        st.session_state.focus_theme = None
         st.session_state.user_text = ""
 
 
-# 5. SIDEBAR (Renamed to Your Enquiries History)
+# 5. SIDEBAR
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
     st.title("Your Enquiries History")
@@ -148,13 +148,12 @@ def load_victoria():
 victoria = load_victoria()
 
 # 8. MAIN INTERFACE
-st.title("👑 Victoria: Histographer Agent")
+st.title("Victoria 👑")
+st.subheader("Victorian Era Histographer Agent")
 
-# Filter logic for Focus Mode
 display_messages = st.session_state.messages
 if st.session_state.focus_theme:
     st.info(f"Viewing records related to: **{st.session_state.focus_theme}**")
-    # Identify indices of the focused question and the assistant's subsequent answer
     idx = next(
         i
         for i, m in enumerate(st.session_state.messages)
@@ -177,7 +176,6 @@ st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
-    # Catch greetings
     if len(current_input.split()) < 3 and "hello" in current_input.lower():
         answer = "Good day! How may I assist your research?"
         st.session_state.messages.append(
@@ -210,7 +208,6 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
                 with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
                     st.table(curr_ev)
 
-            # Identify the theme of the LAST USER MESSAGE to attach to this answer
             last_theme = next(
                 m["theme"]
                 for m in reversed(st.session_state.messages)

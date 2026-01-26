@@ -21,6 +21,7 @@ if "messages" not in st.session_state:
 if "last_evidence" not in st.session_state:
     st.session_state.last_evidence = []
 
+
 # --- 3. THE INSTANT SIDEBAR FIX (CALLBACK) ---
 def handle_input():
     if st.session_state.user_text:
@@ -31,13 +32,14 @@ def handle_input():
         # Clear the input box immediately
         st.session_state.user_text = ""
 
+
 # 4. SIDEBAR RENDERING
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
     st.title("📜 Research Log")
     st.caption("A record of our scholarly correspondence.")
     st.divider()
-    
+
     # Display every user message in the log (now perfectly synced)
     user_queries = [
         m["content"] for m in st.session_state.messages if m["role"] == "user"
@@ -50,19 +52,22 @@ with st.sidebar:
 
     st.divider()
     if st.button("🗑️ Reset Archive"):
-        st.session_state.messages = [{"role": "assistant", "content": "Archives cleared. How may I assist?"}]
+        st.session_state.messages = [
+            {"role": "assistant", "content": "Archives cleared. How may I assist?"}
+        ]
         st.session_state.last_evidence = []
         st.rerun()
 
 # 5. DEFINE ARCHIVE TOOL
 from core.retriever import get_retriever
 
+
 @tool
 def search_royal_archives(query: str):
     """MANDATORY: Consult this for any factual historical claims or evidence from the Victorian era."""
     retriever = get_retriever()
     docs = retriever.invoke(query)
-    
+
     # Store evidence globally so the UI can catch it after the tool call finishes
     st.session_state.last_evidence = docs
 
@@ -72,6 +77,7 @@ def search_royal_archives(query: str):
         page = d.metadata.get("page", "N/A")
         results.append(f"SOURCE: {source} (Page {page})\nCONTENT: {d.page_content}")
     return "\n\n".join(results)
+
 
 # 6. AGENT SETUP
 @st.cache_resource
@@ -99,4 +105,62 @@ def load_victoria():
         ]
     )
     agent = create_openai_tools_agent(llm, tools, prompt)
-    return AgentExecutor(agent=agent, tools=tools, verbose=True
+    return AgentExecutor(
+        agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
+    )
+
+
+victoria = load_victoria()
+
+# 7. MAIN INTERFACE
+st.title("👑 Victoria: Histographer Agent")
+
+# Render existing chat history
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+# Input Box with Callback for Instant Feedback
+st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
+
+# 8. AGENT EXECUTION LOGIC
+if "pending_input" in st.session_state and st.session_state.pending_input:
+    current_input = st.session_state.pop("pending_input")
+
+    with st.chat_message("assistant"):
+        # Reset evidence list before the new search
+        st.session_state.last_evidence = []
+
+        with st.status("Searching the Royal Archives...", expanded=True) as status:
+            # Force the agent to look for evidence even on general topics
+            enhanced_input = f"{current_input}. (Please verify this in the royal archives and provide page references.)"
+
+            response = victoria.invoke(
+                {
+                    "input": enhanced_input,
+                    "chat_history": st.session_state.messages[:-1],
+                }
+            )
+            status.update(label="Consultation Complete", state="complete")
+
+        st.markdown(response["output"])
+
+        # THE EVIDENCE VISUAL: Display if metadata was found
+        if st.session_state.last_evidence:
+            with st.expander("📝 Archival Evidence & Page References", expanded=True):
+                for doc in st.session_state.last_evidence:
+                    source_file = os.path.basename(
+                        doc.metadata.get("source", "Archive Record")
+                    )
+                    page_val = doc.metadata.get("page", "N/A")
+                    st.write(f"📖 **Source:** {source_file} | **Page:** {page_val}")
+                    st.caption(f'"{doc.page_content[:450]}..."')
+                    st.divider()
+
+        # Update session state history
+        st.session_state.messages.append(
+            {"role": "assistant", "content": response["output"]}
+        )
+
+        # Final rerun to ensure everything is synced
+        st.rerun()

@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor, create_openai_tools_agent
-from langchain.core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
 
 # 1. PAGE SETUP
@@ -148,8 +148,7 @@ def load_victoria():
 victoria = load_victoria()
 
 # 8. MAIN INTERFACE
-st.title("Victoria 👑")
-st.subheader("Victorian Era Histographer Agent")
+st.title("👑 Victoria: Histographer Agent")
 
 # Filter logic for Focus Mode
 display_messages = st.session_state.messages

@@ -26,45 +26,75 @@ if "messages" not in st.session_state:
             "role": "assistant",
             "content": "Good day. I am Victoria. How may I assist your research today?",
             "evidence": None,
+            "theme": "Greeting",
         }
     ]
-# We keep a temporary list for the current tool call
 if "temp_evidence" not in st.session_state:
     st.session_state.temp_evidence = []
+if "focus_theme" not in st.session_state:
+    st.session_state.focus_theme = None
 
 
-# --- 3. SIDEBAR CALLBACK ---
+# --- 3. THEME IDENTIFIER (Mini-LLM) ---
+def identify_theme(text):
+    if not text or len(text) < 5:
+        return "General"
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    response = llm.invoke(
+        f"Summarize this historical query into 2-3 words (e.g., 'Steam Engine' or 'Child Labor'). Query: {text}"
+    )
+    return response.content.strip().replace('"', "")
+
+
+# --- 4. SIDEBAR CALLBACK ---
 def handle_input():
     if st.session_state.user_text:
         new_prompt = st.session_state.user_text
-        # Append user message with no evidence
+        theme = identify_theme(new_prompt)
+        # We attach the theme to the user message
         st.session_state.messages.append(
-            {"role": "user", "content": new_prompt, "evidence": None}
+            {"role": "user", "content": new_prompt, "evidence": None, "theme": theme}
         )
         st.session_state.pending_input = new_prompt
         st.session_state.temp_evidence = []
+        st.session_state.focus_theme = None  # Clear focus on new question
         st.session_state.user_text = ""
 
 
-# 4. SIDEBAR
+# 5. SIDEBAR (Renamed to Your Enquiries History)
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
-    st.title("📜 Research Log")
+    st.title("Your Enquiries History")
     st.divider()
-    user_queries = [
-        m["content"] for m in st.session_state.messages if m["role"] == "user"
-    ]
-    for i, query in enumerate(user_queries):
-        st.caption(f"{i+1}. {query[:40]}...")
 
+    # Show unique themes from history
+    all_themes = [
+        m.get("theme")
+        for m in st.session_state.messages
+        if m.get("theme") and m["role"] == "user"
+    ]
+
+    if st.button("👁️ Show All History"):
+        st.session_state.focus_theme = None
+
+    for theme in reversed(all_themes):
+        if st.button(f"📜 {theme}", use_container_width=True):
+            st.session_state.focus_theme = theme
+
+    st.divider()
     if st.button("🗑️ Reset Archive"):
         st.session_state.messages = [
-            {"role": "assistant", "content": "Archives cleared.", "evidence": None}
+            {
+                "role": "assistant",
+                "content": "Archives cleared.",
+                "evidence": None,
+                "theme": "Greeting",
+            }
         ]
-        st.session_state.temp_evidence = []
+        st.session_state.focus_theme = None
         st.rerun()
 
-# 5. ARCHIVE TOOL
+# 6. ARCHIVE TOOL
 from core.retriever import get_retriever
 
 
@@ -73,27 +103,23 @@ def search_royal_archives(query: str):
     """MANDATORY: Use this for any factual historical query."""
     retriever = get_retriever()
     docs = retriever.invoke(query)
-
     evidence_list = []
     seen = set()
     for d in docs:
         fname = os.path.basename(d.metadata.get("source", ""))
         title = SOURCE_TITLES.get(fname, fname)
         page = d.metadata.get("page", "N/A")
-
         ref = f"{title}-{page}"
         if ref not in seen:
             evidence_list.append({"Source Title": title, "Page": page})
             seen.add(ref)
-
-    # Save to temp area to be picked up by the message loop
     st.session_state.temp_evidence = evidence_list
     return "\n".join(
         [f"Found in: {e['Source Title']} Page {e['Page']}" for e in evidence_list]
     )
 
 
-# 6. AGENT SETUP
+# 7. AGENT SETUP
 @st.cache_resource
 def load_victoria():
     from core.tools import victorian_currency_converter, industry_stats_calculator
@@ -104,15 +130,11 @@ def load_victoria():
         industry_stats_calculator,
     ]
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                """You are Victoria, a formal British Histographer. 
-        When asked about history, use 'search_royal_archives'. 
-        IMPORTANT: Do NOT list your sources or page numbers in your text. 
-        Narrate the history elegantly.""",
+                "You are Victoria, a formal British Histographer. Use search_royal_archives for history. Do NOT list sources in text.",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -125,34 +147,50 @@ def load_victoria():
 
 victoria = load_victoria()
 
-# 7. MAIN INTERFACE
+# 8. MAIN INTERFACE
 st.title("👑 Victoria: Histographer Agent")
 
-# RENDER MESSAGES + PERMANENT EVIDENCE
-for msg in st.session_state.messages:
+# Filter logic for Focus Mode
+display_messages = st.session_state.messages
+if st.session_state.focus_theme:
+    st.info(f"Viewing records related to: **{st.session_state.focus_theme}**")
+    # Identify indices of the focused question and the assistant's subsequent answer
+    idx = next(
+        i
+        for i, m in enumerate(st.session_state.messages)
+        if m.get("theme") == st.session_state.focus_theme
+    )
+    display_messages = st.session_state.messages[idx : idx + 2]
+
+# RENDER
+for msg in display_messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
-        # If this message has evidence attached, show it right here!
         if msg.get("evidence"):
-            with st.expander("📝 ARCHIVAL CITATIONS", expanded=False):
+            with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
                 st.table(msg["evidence"])
 
-# Input Box
+# Input
 st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 
-# 9. LOGIC
+# 9. EXECUTION
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
-    greetings = ["hello", "hi", "greetings", "good day"]
-    if current_input.lower().strip() in greetings:
-        answer = "Good day! How may I assist your research into our glorious era?"
+    # Catch greetings
+    if len(current_input.split()) < 3 and "hello" in current_input.lower():
+        answer = "Good day! How may I assist your research?"
         st.session_state.messages.append(
-            {"role": "assistant", "content": answer, "evidence": None}
+            {
+                "role": "assistant",
+                "content": answer,
+                "evidence": None,
+                "theme": "Greeting",
+            }
         )
     else:
         with st.chat_message("assistant"):
-            with st.status("Searching the Royal Archives...", expanded=True) as status:
+            with st.status("Consulting Archives...", expanded=True) as status:
                 response = victoria.invoke(
                     {
                         "input": current_input,
@@ -160,22 +198,31 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
                     }
                 )
                 answer = response["output"]
-                status.update(label="Consultation Complete", state="complete")
+                status.update(label="Complete", state="complete")
             st.markdown(answer)
 
-            # Attach the evidence to this specific assistant message
-            current_evidence = (
+            curr_ev = (
                 st.session_state.temp_evidence
                 if st.session_state.temp_evidence
                 else None
             )
-            if current_evidence:
+            if curr_ev:
                 with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
-                    st.table(current_evidence)
+                    st.table(curr_ev)
 
-            # Save the message AND its specific evidence together
-            st.session_state.messages.append(
-                {"role": "assistant", "content": answer, "evidence": current_evidence}
+            # Identify the theme of the LAST USER MESSAGE to attach to this answer
+            last_theme = next(
+                m["theme"]
+                for m in reversed(st.session_state.messages)
+                if m["role"] == "user"
             )
 
+            st.session_state.messages.append(
+                {
+                    "role": "assistant",
+                    "content": answer,
+                    "evidence": curr_ev,
+                    "theme": last_theme,
+                }
+            )
     st.rerun()

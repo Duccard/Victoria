@@ -10,6 +10,32 @@ from langchain.tools import tool
 st.set_page_config(page_title="Victoria", page_icon="👑", layout="wide")
 load_dotenv()
 
+# --- CUSTOM THEME (CSS) ---
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background-color: #f4f1ea; /* Parchment Background */
+    }
+    [data-testid="stSidebar"] {
+        background-color: #2e3b4e !important;
+    }
+    [data-testid="stSidebar"] .stCaption, [data-testid="stSidebar"] p {
+        color: #d1d1d1 !important;
+    }
+    /* Subtitle styling */
+    .subtitle {
+        font-style: italic;
+        color: #5d5d5d;
+        margin-top: -25px;
+        margin-bottom: 25px;
+        font-size: 1.1rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # --- SOURCE TITLES DICTIONARY ---
 SOURCE_TITLES = {
     "20-Industrial-Rev.pdf": "The Industrial Revolution Archives (Vol. 20)",
@@ -51,23 +77,21 @@ def handle_input():
     if st.session_state.user_text:
         new_prompt = st.session_state.user_text
         theme = identify_theme(new_prompt)
-        # We attach the theme to the user message
         st.session_state.messages.append(
             {"role": "user", "content": new_prompt, "evidence": None, "theme": theme}
         )
         st.session_state.pending_input = new_prompt
         st.session_state.temp_evidence = []
-        st.session_state.focus_theme = None  # Clear focus on new question
+        st.session_state.focus_theme = None
         st.session_state.user_text = ""
 
 
-# 5. SIDEBAR (Renamed to Your Enquiries History)
+# 5. SIDEBAR
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
     st.title("Your Enquiries History")
     st.divider()
 
-    # Show unique themes from history
     all_themes = [
         m.get("theme")
         for m in st.session_state.messages
@@ -147,14 +171,16 @@ def load_victoria():
 
 victoria = load_victoria()
 
-# 8. MAIN INTERFACE
-st.title("👑 Victoria: Histographer Agent")
+# 8. MAIN INTERFACE (Titles Updated)
+st.title("Victoria 👑")
+st.markdown(
+    '<p class="subtitle">Victorian Era Histographer Agent</p>', unsafe_allow_html=True
+)
 
-# Filter logic for Focus Mode
+# Filter logic
 display_messages = st.session_state.messages
 if st.session_state.focus_theme:
     st.info(f"Viewing records related to: **{st.session_state.focus_theme}**")
-    # Identify indices of the focused question and the assistant's subsequent answer
     idx = next(
         i
         for i, m in enumerate(st.session_state.messages)
@@ -170,14 +196,12 @@ for msg in display_messages:
             with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
                 st.table(msg["evidence"])
 
-# Input
 st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 
 # 9. EXECUTION
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
-    # Catch greetings
     if len(current_input.split()) < 3 and "hello" in current_input.lower():
         answer = "Good day! How may I assist your research?"
         st.session_state.messages.append(
@@ -210,7 +234,6 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
                 with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
                     st.table(curr_ev)
 
-            # Identify the theme of the LAST USER MESSAGE to attach to this answer
             last_theme = next(
                 m["theme"]
                 for m in reversed(st.session_state.messages)

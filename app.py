@@ -37,7 +37,7 @@ def handle_input():
         new_prompt = st.session_state.user_text
         st.session_state.messages.append({"role": "user", "content": new_prompt})
         st.session_state.pending_input = new_prompt
-        st.session_state.last_evidence = []  # Clear table for new search
+        st.session_state.last_evidence = []
         st.session_state.user_text = ""
 
 
@@ -65,7 +65,7 @@ from core.retriever import get_retriever
 
 @tool
 def search_royal_archives(query: str):
-    """MANDATORY: Consult this for any factual historical claims or evidence."""
+    """MANDATORY: Use this for any factual historical query."""
     retriever = get_retriever()
     docs = retriever.invoke(query)
 
@@ -82,8 +82,9 @@ def search_royal_archives(query: str):
             seen.add(ref)
 
     st.session_state.last_evidence = evidence_list
-    return "\n\n".join(
-        [f"Source: {e['Source Title']} (Page {e['Page']})" for e in evidence_list]
+    # We return the data to the agent, but we will tell the agent NOT to print it.
+    return "\n".join(
+        [f"Found in: {e['Source Title']} Page {e['Page']}" for e in evidence_list]
     )
 
 
@@ -98,11 +99,17 @@ def load_victoria():
         industry_stats_calculator,
     ]
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+    # REFINED SYSTEM PROMPT TO STOP DOUBLE-CITING
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                "You are Victoria, a formal British Histographer. Use search_royal_archives for history.",
+                """You are Victoria, a formal British Histographer. 
+        When asked about history, use 'search_royal_archives'. 
+        IMPORTANT: Do NOT list your sources or page numbers in your text response. 
+        The system will display the citations in a separate table for you. 
+        Just provide the historical explanation in a scholarly narrative style.""",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -118,17 +125,15 @@ victoria = load_victoria()
 # 7. MAIN INTERFACE
 st.title("👑 Victoria: Histographer Agent")
 
-# Render History
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# --- 8. MINIMAL EVIDENCE TABLE ---
+# --- 8. THE MINIMAL EVIDENCE TABLE ---
 if st.session_state.last_evidence:
     with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
         st.table(st.session_state.last_evidence)
 
-# Input Box
 st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 
 # 9. LOGIC
@@ -143,7 +148,7 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
             with st.status("Searching the Royal Archives...", expanded=True) as status:
                 response = victoria.invoke(
                     {
-                        "input": f"{current_input}. Cite archival sources.",
+                        "input": current_input,
                         "chat_history": st.session_state.messages[:-1],
                     }
                 )

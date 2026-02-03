@@ -10,7 +10,6 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
 from core.retriever import get_retriever
 
-
 # ==========================================
 # 1. PAGE SETUP & DATA
 # ==========================================
@@ -80,14 +79,13 @@ def handle_input():
 
 
 # ==========================================
-# 4. ARCHIVE TOOL
+# 4. ARCHIVE TOOL (FIXED ERROR)
 # ==========================================
 
 
-@tool(
-    description="Search the Victorian-era archives and return sources and pages for a query."
-)
+@tool
 def search_royal_archives(query: str):
+    """Search the Victorian-era archives and return sources and pages for a query."""
     retriever = get_retriever()
     docs = retriever.invoke(query)
     evidence_list = []
@@ -115,7 +113,7 @@ AVATARS = {
     "Queen Victoria": "👑",
     "Oscar Wilde": "🎭",
     "Jack the Ripper": "🔪",
-    "Isambard Kingdom Brunel": "⚙️",
+    "Isambard Kingdom Brunel": "⚙️",  # Cog Icon
     "user": "🎩",
 }
 
@@ -136,7 +134,7 @@ with st.sidebar:
     if st.button("👁️ Show All Records", use_container_width=True):
         st.session_state.focus_theme = None
 
-    for i, theme in enumerate(reversed(all_themes)):
+    for i, theme in enumerate(reversed(list(dict.fromkeys(all_themes)))):
         if st.button(f"📜 {theme}", key=f"hist_{i}", use_container_width=True):
             st.session_state.focus_theme = theme
 
@@ -150,8 +148,10 @@ with st.sidebar:
                 "theme": "Greeting",
             }
         ]
+        st.session_state.focus_theme = None
         st.rerun()
 
+# Filtering and Rendering
 display_messages = st.session_state.messages
 if st.session_state.focus_theme:
     st.info(f"Viewing records: **{st.session_state.focus_theme}**")
@@ -170,9 +170,7 @@ for msg in display_messages:
 
 st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 
-# ==========================================
-# 6. EXECUTION
-# ==========================================
+# ================= : EXECUTION : =================
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
@@ -188,11 +186,7 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
         [
             (
                 "system",
-                f"You are {st.session_state.current_style}. "
-                "MANDATORY: For every factual historical query, call 'search_royal_archives'. "
-                "Include explicit citations from the retrieved documents in your answer. "
-                "If no documents are found, respond truthfully that the archive has no evidence. "
-                "Be charismatic and immersive in your character.",
+                f"You are {st.session_state.current_style}. MANDATORY: Call 'search_royal_archives' for every fact. Use charisma.",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -218,12 +212,7 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
         evidence = st.session_state.temp_evidence
         if evidence:
             with st.expander("📝 ARCHIVAL EVIDENCE", expanded=True):
-                st.table(
-                    [
-                        {"Source Title": e["Source Title"], "Page": e["Page"]}
-                        for e in evidence
-                    ]
-                )
+                st.table(evidence)
 
         last_theme = next(
             (

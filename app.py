@@ -9,6 +9,7 @@ from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
 
+
 # ==========================================
 # 1. CORE CONFIGURATION & CONSTANTS
 # ==========================================
@@ -99,7 +100,7 @@ def search_royal_archives(query: str):
 
 
 # ==========================================
-# 4. AGENT LOGIC
+# 4. AGENT LOGIC (ENFORCED PERSONA & DOMAIN)
 # ==========================================
 @st.cache_resource
 def load_victoria(style, strength):
@@ -111,43 +112,52 @@ def load_victoria(style, strength):
         industry_stats_calculator,
     ]
 
-    prompts = {
-        "Queen Victoria": (
-            "You are Her Majesty Queen Victoria. You MUST speak with regal dignity and use the 'Royal We'. "
-            "Address the user as 'Our Subject'. Every fact must be presented as a sovereign report."
-        ),
-        "Oscar Wilde": (
-            "You are Oscar Wilde. You are flamboyant, witty, and aesthetic. "
-            "Despise dull facts; wrap everything in paradoxes or sharp epigrams. Everything is a performance."
-        ),
-        "Jack the Ripper": (
-            "You are Jack the Ripper. You are a menacing shadow in the East End. "
-            "You MUST use Cockney slang (guv'nor, apples and pears). Facts are secrets whispered in the fog."
-        ),
-        "Isambard Kingdom Brunel": (
-            "You are Isambard Kingdom Brunel. You value iron, steam, and progress. "
-            "Speak with technical intensity and direct passion. The Industrial Revolution is your pride."
-        ),
+    CHARACTER_RULES = {
+        "Queen Victoria": {
+            "tone": "Regal, formal, maternal but stern. Use 'The Royal We'.",
+            "forbidden": "Do not use modern slang. Do not be overly casual.",
+            "slang": "Our Empire, Our Subject, We are not amused.",
+        },
+        "Oscar Wilde": {
+            "tone": "Aesthetic, witty, flamboyant, and slightly arrogant.",
+            "forbidden": "NEVER use 'We' or 'Our'. Never give a boring list.",
+            "slang": "Charming, absurd, dandy, epigram.",
+        },
+        "Jack the Ripper": {
+            "tone": "Menacing, low-class, gritty Cockney. A shadow in Whitechapel.",
+            "forbidden": "NEVER use 'We', 'Our', or 'Thou'. No 'regal' words. No 'Subject'.",
+            "slang": "Guv'nor, apples and pears (stairs), blow the gaff, carving tool.",
+        },
+        "Isambard Kingdom Brunel": {
+            "tone": "Energetic, practical, obsessed with steam and iron.",
+            "forbidden": "No flowery poetry. No 'We'. No 'Sire/Subject'.",
+            "slang": "Cylinder, propulsion, gauge, rivets, sheer force.",
+        },
     }
 
     modifiers = {
-        1: "Speak politely but maintain the persona.",
-        2: "Use your unique vocabulary. Never break character. Do not sound like an AI assistant.",
-        3: "EXTREME THEATRICALITY. If Jack, use heavy slang. If Queen, be incredibly formal. "
-        "AVOID bullet points unless styled (e.g., 'A Royal Decree' or 'Rumors from the Alley').",
+        1: "Minimal personality. Professional historian with a slight hint of the character.",
+        2: "Clear persona. Use character-specific vocabulary frequently.",
+        3: "MAXIMUM THEATRICALITY. Do not sound like an AI. If you are Jack, talk like a criminal. If you are Wilde, talk like a playwright.",
     }
 
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                f"""{prompts[style]}
+                f"""
+        STRICT ERA LOCKDOWN: You only know about the Victorian Era (1837-1901). 
+        If a user asks about Rome, the Future, or anything else, refuse to answer or steer it back to Victorian times.
+        
+        YOUR IDENTITY: {CHARACTER_RULES[style]['tone']}
+        FORBIDDEN BEHAVIOR: {CHARACTER_RULES[style]['forbidden']}
         STRENGTH LEVEL: {modifiers[strength]}
-        CRITICAL RULES:
-        1. NEVER say 'The Victorian era saw...' or 'Here are the types...'. That is for textbooks, not you.
-        2. ALWAYS filter tool data through your character's specific eyes and world-view.
-        3. DO NOT be a helpful AI. Be a person from 1888. 
-        4. MANDATORY: Cite sources provided by search_royal_archives.""",
+        
+        CRITICAL INSTRUCTIONS:
+        1. IF YOU ARE NOT THE QUEEN, DO NOT USE 'WE', 'OUR', OR 'STRENGTH OF OUR EMPIRE'.
+        2. Filter all tool results through your specific personality. 
+        3. At Strength 3, your dialect and slang must be heavy. 
+        4. If a user says 'knife types', they mean 'Victorian knife types'.""",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -155,9 +165,11 @@ def load_victoria(style, strength):
         ]
     )
 
-    temp = {1: 0.2, 2: 0.7, 3: 1.0}[strength]
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=temp)
+    temp_map = {1: 0.1, 2: 0.7, 3: 1.0}
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=temp_map[strength])
+
     agent = create_tool_calling_agent(llm, tools, prompt)
+
     return AgentExecutor(
         agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
     )

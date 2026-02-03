@@ -8,6 +8,8 @@ from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
+from core.retriever import get_retriever
+
 
 # ==========================================
 # 1. PAGE SETUP & DATA
@@ -80,10 +82,11 @@ def handle_input():
 # ==========================================
 # 4. ARCHIVE TOOL
 # ==========================================
-from core.retriever import get_retriever
 
 
-@tool
+@tool(
+    description="Search the Victorian-era archives and return sources and pages for a query."
+)
 def search_royal_archives(query: str):
     retriever = get_retriever()
     docs = retriever.invoke(query)

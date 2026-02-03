@@ -1,3 +1,7 @@
+# ==========================================
+# 0. IMPORTS
+# ==========================================
+
 import streamlit as st
 import os
 from dotenv import load_dotenv
@@ -6,11 +10,12 @@ from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
 
-# 1. PAGE SETUP
+# ==========================================
+# 1. CORE CONFIGURATION & CONSTANTS
+# ==========================================
 st.set_page_config(page_title="Victoria", page_icon="👑", layout="wide")
 load_dotenv()
 
-# --- SOURCE TITLES DICTIONARY ---
 SOURCE_TITLES = {
     "20-Industrial-Rev.pdf": "The Industrial Revolution Archives (Vol. 20)",
     "Chapter-8-The-Industrial-Revolution.pdf": "British Industrial History, Chapter VIII",
@@ -23,7 +28,6 @@ SOURCE_TITLES = {
     "WHP-6526-Read--Innovations-and-Inventions.pdf": "Innovations and Innovators of the Industrial Revolution (OER Project)",
 }
 
-# --- AVATAR MAPPING ---
 STYLE_AVATARS = {
     "Queen Victoria": "👑",
     "Oscar Wilde": "🎭",
@@ -31,27 +35,38 @@ STYLE_AVATARS = {
     "Isambard Kingdom Brunel": "⚙️",
 }
 
-# 2. STATE INITIALIZATION
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": "We are pleased to receive you. How may We assist your research into Our Empire today?",
-            "evidence": None,
-            "theme": "Greeting",
-            "avatar": "👑",  # Initial avatar is locked as Queen Victoria
-        }
-    ]
-if "temp_evidence" not in st.session_state:
-    st.session_state.temp_evidence = []
-if "focus_theme" not in st.session_state:
-    st.session_state.focus_theme = None
-if "current_style" not in st.session_state:
-    st.session_state.current_style = "Queen Victoria"
+
+# ==========================================
+# 2. STATE MANAGEMENT
+# ==========================================
+def initialize_state():
+    """Ensures all session state variables are present."""
+    if "messages" not in st.session_state:
+        st.session_state.messages = [
+            {
+                "role": "assistant",
+                "content": "We are pleased to receive you. How may We assist your research into Our Empire today?",
+                "evidence": None,
+                "theme": "Greeting",
+                "avatar": "👑",
+            }
+        ]
+    if "temp_evidence" not in st.session_state:
+        st.session_state.temp_evidence = []
+    if "focus_theme" not in st.session_state:
+        st.session_state.focus_theme = None
+    if "current_style" not in st.session_state:
+        st.session_state.current_style = "Queen Victoria"
 
 
-# --- 3. THEME IDENTIFIER ---
+initialize_state()
+
+
+# ==========================================
+# 3. HELPER FUNCTIONS & TOOLS
+# ==========================================
 def identify_theme(text):
+    """Summarizes query for history categorization."""
     if not text or len(text) < 5:
         return "General"
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
@@ -61,83 +76,14 @@ def identify_theme(text):
     return response.content.strip().replace('"', "")
 
 
-# --- 4. SIDEBAR CALLBACK ---
-def handle_input():
-    if st.session_state.user_text:
-        new_prompt = st.session_state.user_text
-        theme = identify_theme(new_prompt)
-        # Store user messages without a specific persona avatar
-        st.session_state.messages.append(
-            {
-                "role": "user",
-                "content": new_prompt,
-                "evidence": None,
-                "theme": theme,
-                "avatar": None,
-            }
-        )
-        st.session_state.pending_input = new_prompt
-        st.session_state.temp_evidence = []
-        st.session_state.focus_theme = None
-        st.session_state.user_text = ""
-
-
-# --- 5. SIDEBAR ---
-with st.sidebar:
-    st.image("https://img.icons8.com/color/96/scroll.png")
-    st.title("Correspondence Archives")
-
-    st.divider()
-    st.subheader("Historical Persona")
-    style_choice = st.selectbox(
-        "Select Correspondent:",
-        ["Queen Victoria", "Oscar Wilde", "Jack the Ripper", "Isambard Kingdom Brunel"],
-        index=0,
-    )
-
-    char_strength = st.slider("Character Strength:", min_value=1, max_value=3, value=2)
-
-    st.session_state.current_style = style_choice
-    st.session_state.char_strength = char_strength
-    st.divider()
-
-    # History theme logic
-    all_themes = [
-        m.get("theme")
-        for m in st.session_state.messages
-        if m.get("theme") and m["role"] == "user"
-    ]
-
-    if st.button("👁️ Show All History"):
-        st.session_state.focus_theme = None
-
-    for i, theme in enumerate(reversed(all_themes)):
-        if st.button(f"📜 {theme}", key=f"hist_{i}_{theme}", use_container_width=True):
-            st.session_state.focus_theme = theme
-
-    st.divider()
-    if st.button("🗑️ Reset Archive"):
-        st.session_state.messages = [
-            {
-                "role": "assistant",
-                "content": "Archives cleared.",
-                "evidence": None,
-                "theme": "Greeting",
-                "avatar": "🤖",
-            }
-        ]
-        st.session_state.focus_theme = None
-        st.rerun()
-
-# 6. ARCHIVE TOOL
-from core.retriever import get_retriever
-
-
 @tool
 def search_royal_archives(query: str):
     """MANDATORY: Use this for any factual historical query."""
+    from core.retriever import get_retriever  # Localized import for cleaner flow
+
     retriever = get_retriever()
     docs = retriever.invoke(query)
+
     evidence_list = []
     seen = set()
     for d in docs:
@@ -148,15 +94,19 @@ def search_royal_archives(query: str):
         if ref not in seen:
             evidence_list.append({"Source Title": title, "Page": page})
             seen.add(ref)
+
     st.session_state.temp_evidence = evidence_list
     return "\n".join(
         [f"Found in: {e['Source Title']} Page {e['Page']}" for e in evidence_list]
     )
 
 
-# --- 7. AGENT SETUP ---
+# ==========================================
+# 4. AGENT LOGIC
+# ==========================================
 @st.cache_resource
 def load_victoria(style, strength):
+    """Creates the LangChain agent based on persona and strength."""
     from core.tools import victorian_currency_converter, industry_stats_calculator
 
     tools = [
@@ -165,24 +115,24 @@ def load_victoria(style, strength):
         industry_stats_calculator,
     ]
 
-    strength_modifiers = {
-        1: "Professional and subtle.",
-        2: "Distinct personality and phrases.",
-        3: "Extreme method acting and theatricality.",
-    }
-
-    style_prompts = {
+    prompts = {
         "Queen Victoria": "Queen Victoria. Royal We. Sovereign and moral.",
         "Oscar Wilde": "Oscar Wilde. Aesthetic, witty, and paradoxical.",
         "Jack the Ripper": "Jack the Ripper. Menacing cockney shadows.",
         "Isambard Kingdom Brunel": "Brunel. Passionate engineering and progress.",
     }
 
+    modifiers = {
+        1: "Professional and subtle.",
+        2: "Distinct personality and phrases.",
+        3: "Extreme method acting and theatricality.",
+    }
+
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                f"You are Victoria. Persona: {style_prompts[style]}. Strength: {strength_modifiers[strength]}. MUST use search_royal_archives.",
+                f"You are Victoria. Persona: {prompts[style]}. Strength: {modifiers[strength]}. Use search_royal_archives.",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -190,21 +140,54 @@ def load_victoria(style, strength):
         ]
     )
 
-    temp_map = {1: 0.1, 2: 0.5, 3: 0.9}
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=temp_map[strength])
+    temp = {1: 0.1, 2: 0.5, 3: 0.9}[strength]
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=temp)
     agent = create_openai_tools_agent(llm, tools, prompt)
     return AgentExecutor(
         agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
     )
 
 
-victoria = load_victoria(st.session_state.current_style, st.session_state.char_strength)
+# ==========================================
+# 5. SIDEBAR & NAVIGATION
+# ==========================================
+with st.sidebar:
+    st.image("https://img.icons8.com/color/96/scroll.png")
+    st.title("Correspondence Archives")
 
-# 8. MAIN INTERFACE
+    st.divider()
+    st.subheader("Historical Persona")
+    st.session_state.current_style = st.selectbox(
+        "Select Correspondent:", list(STYLE_AVATARS.keys()), index=0
+    )
+    st.session_state.char_strength = st.slider("Character Strength:", 1, 3, 2)
+
+    st.divider()
+    st.subheader("Inquiry History")
+
+    all_themes = [
+        m.get("theme")
+        for m in st.session_state.messages
+        if m.get("theme") and m["role"] == "user"
+    ]
+    if st.button("👁️ Show All History"):
+        st.session_state.focus_theme = None
+
+    for i, theme in enumerate(reversed(all_themes)):
+        if st.button(f"📜 {theme}", key=f"hist_{i}_{theme}", use_container_width=True):
+            st.session_state.focus_theme = theme
+
+    if st.button("🗑️ Reset Archive", type="secondary"):
+        st.session_state.clear()
+        st.rerun()
+
+# ==========================================
+# 6. MAIN CHAT INTERFACE
+# ==========================================
 st.title("Victoria 👑")
-# ADDED SUBTITLE
 st.caption("### Victorian Era Histographer")
 
+# Filter messages if a theme is selected
 display_messages = st.session_state.messages
 if st.session_state.focus_theme:
     st.info(f"Viewing records related to: **{st.session_state.focus_theme}**")
@@ -215,37 +198,56 @@ if st.session_state.focus_theme:
     )
     display_messages = st.session_state.messages[idx : idx + 2]
 
-# RENDER: Uses the locked-in avatar for each message
+# Render Chat
 for msg in display_messages:
     with st.chat_message(msg["role"], avatar=msg.get("avatar")):
         st.markdown(msg["content"])
         if msg.get("evidence"):
-            with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
+            with st.expander("📝 ARCHIVAL CITATIONS"):
                 st.table(msg["evidence"])
+
+
+# ==========================================
+# 7. CHAT INPUT & EXECUTION
+# ==========================================
+def handle_input():
+    if st.session_state.user_text:
+        theme = identify_theme(st.session_state.user_text)
+        st.session_state.messages.append(
+            {
+                "role": "user",
+                "content": st.session_state.user_text,
+                "theme": theme,
+                "avatar": None,
+            }
+        )
+        st.session_state.pending_input = st.session_state.user_text
+        st.session_state.user_text = ""
+
 
 st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 
-# 9. EXECUTION
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
-
-    # Capture active avatar before generating response
     active_avatar = STYLE_AVATARS.get(st.session_state.current_style, "🤖")
+    victoria = load_victoria(
+        st.session_state.current_style, st.session_state.char_strength
+    )
 
     with st.chat_message("assistant", avatar=active_avatar):
         with st.status("Searching Royal Archives...", expanded=True) as status:
             response = victoria.invoke(
                 {"input": current_input, "chat_history": st.session_state.messages[:-1]}
             )
-            answer = response["output"]
             status.update(label="Archives Consulted", state="complete")
 
-        st.markdown(answer)
+        st.markdown(response["output"])
+
         curr_ev = (
             st.session_state.temp_evidence if st.session_state.temp_evidence else None
         )
         if curr_ev:
-            with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
+            with st.expander("📝 ARCHIVAL CITATIONS"):
                 st.table(curr_ev)
 
         last_theme = next(
@@ -253,12 +255,10 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
             for m in reversed(st.session_state.messages)
             if m["role"] == "user"
         )
-
-        # Save the specific avatar used for this message
         st.session_state.messages.append(
             {
                 "role": "assistant",
-                "content": answer,
+                "content": response["output"],
                 "evidence": curr_ev,
                 "theme": last_theme,
                 "avatar": active_avatar,

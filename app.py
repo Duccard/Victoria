@@ -76,7 +76,6 @@ def handle_input():
         )
         st.session_state.pending_input = new_prompt
         st.session_state.temp_evidence = []
-        st.session_state.focus_theme = None
 
 
 # ==========================================
@@ -84,7 +83,7 @@ def handle_input():
 # ==========================================
 @tool
 def search_royal_archives(query: str):
-    """MANDATORY: Use this for any factual historical query."""
+    """Search the Victorian-era archives and return sources and pages for a query."""
     retriever = get_retriever()
     docs = retriever.invoke(query)
     evidence_list = []
@@ -93,10 +92,9 @@ def search_royal_archives(query: str):
         fname = os.path.basename(d.metadata.get("source", ""))
         title = SOURCE_TITLES.get(fname, fname)
         page = d.metadata.get("page", "N/A")
-        ref = f"{title}-{page}"
-        if ref not in seen:
+        if f"{title}-{page}" not in seen:
             evidence_list.append({"Source Title": title, "Page": page})
-            seen.add(ref)
+            seen.add(f"{title}-{page}")
     st.session_state.temp_evidence = evidence_list
     return "\n".join(
         [f"Source: {e['Source Title']} (Page {e['Page']})" for e in evidence_list]
@@ -109,26 +107,44 @@ def search_royal_archives(query: str):
 st.title("Victoria 👑")
 st.markdown("#### Victorian Era Histographer")
 
-AVATARS = {"assistant": "👑", "user": "🎩"}
+AVATARS = {
+    "Queen Victoria": "👑",
+    "Oscar Wilde": "🎭",
+    "Jack the Ripper": "🔪",
+    "Isambard Kingdom Brunel": "⚙️",
+    "user": "🎩",
+}
 
 with st.sidebar:
-    st.image("https://img.icons8.com/color/96/scroll.png")
-    st.title("Enquiry History")
+    st.image("https://img.icons8.com/color/96/settings.png")
+    st.title("Settings")
+    style_choice = st.selectbox("Select Correspondent:", list(AVATARS.keys())[:-1])
+    st.session_state.current_style = style_choice
 
+    st.divider()
+    st.subheader("Inquiry History")
     all_themes = [
-        m.get("theme") for m in st.session_state.messages if m["role"] == "user"
+        m.get("theme")
+        for m in st.session_state.messages
+        if m.get("theme") and m["role"] == "user"
     ]
-
     if st.button("👁️ Show All Records", use_container_width=True):
         st.session_state.focus_theme = None
-
     for i, theme in enumerate(reversed(list(dict.fromkeys(all_themes)))):
         if st.button(f"📜 {theme}", key=f"hist_{i}", use_container_width=True):
             st.session_state.focus_theme = theme
 
     st.divider()
     if st.button("🗑️ Reset Archive", use_container_width=True):
-        st.session_state.messages = [st.session_state.messages[0]]
+        st.session_state.messages = [
+            {
+                "role": "assistant",
+                "content": "Archives cleared.",
+                "avatar": "👑",
+                "theme": "Greeting",
+                "evidence": None,
+            }
+        ]
         st.session_state.focus_theme = None
         st.rerun()
 
@@ -156,6 +172,13 @@ st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
+    persona_prompts = {
+        "Queen Victoria": "You are Queen Victoria. Speak with absolute royal authority and charisma. Use 'The Royal We'.",
+        "Oscar Wilde": "You are Oscar Wilde. Be flamboyant and witty. Every sentence should be an epigram.",
+        "Jack the Ripper": "Speak in a dark, terrifying cockney whisper. You are the shadow of Whitechapel.",
+        "Isambard Kingdom Brunel": "You are Brunel. Speak with fire about iron and visionary engineering feats.",
+    }
+
     from core.tools import victorian_currency_converter, industry_stats_calculator
 
     tools = [
@@ -168,9 +191,9 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
         [
             (
                 "system",
-                "You are Victoria, a formal British Histographer. Speak with authority and royal charisma. "
+                f"{persona_prompts[st.session_state.current_style]} \n\n"
                 "MANDATORY: You MUST use 'search_royal_archives' for EVERY historical inquiry. "
-                "Do NOT list sources in text; they appear in the table below automatically.",
+                "Do NOT list sources in text; they appear in the table below.",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -178,13 +201,13 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
         ]
     )
 
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.8)
     agent = create_openai_tools_agent(llm, tools, prompt)
     vic_agent = AgentExecutor(
         agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
     )
 
-    with st.chat_message("assistant", avatar="👑"):
+    with st.chat_message("assistant", avatar=AVATARS[st.session_state.current_style]):
         with st.status("Searching Royal Archives...", expanded=True) as status:
             response = vic_agent.invoke(
                 {"input": current_input, "chat_history": st.session_state.messages[:-1]}
@@ -213,7 +236,7 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
                 "content": response["output"],
                 "evidence": evidence_to_save,
                 "theme": last_theme,
-                "avatar": "👑",
+                "avatar": AVATARS[st.session_state.current_style],
             }
         )
     st.rerun()

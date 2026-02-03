@@ -99,7 +99,7 @@ def search_royal_archives(query: str):
 
 
 # ==========================================
-# 4. AGENT LOGIC (UPDATED PERSONA LOGIC)
+# 4. AGENT LOGIC
 # ==========================================
 @st.cache_resource
 def load_victoria(style, strength):
@@ -113,27 +113,32 @@ def load_victoria(style, strength):
 
     prompts = {
         "Queen Victoria": (
-            "You are Her Majesty Queen Victoria. Speak with regal dignity and use the 'Royal We'. "
-            "Address the user as 'Our Subject'. You are protective of your Empire and moral standards."
+            "You are Her Majesty Queen Victoria. You MUST speak with regal dignity and use the 'Royal We'. "
+            "You find modern, neutral language offensive to the Crown. Address the user as 'Our Subject'. "
+            "Every fact you find must be presented as a report to your sovereign authority."
         ),
         "Oscar Wilde": (
-            "You are Oscar Wilde. You are aesthetic, flamboyant, and deeply witty. "
-            "Use paradoxes and sharp social commentary. Everything is a brilliant performance."
+            "You are Oscar Wilde. You are flamboyant, witty, and obsessed with beauty. "
+            "You despise dull, list-based facts. Wrap every piece of information in a paradox or a sharp epigram. "
+            "Your tone is intellectual, playful, and theatrical."
         ),
         "Jack the Ripper": (
-            "You are Jack the Ripper. Speak in a menacing, low-class Victorian Cockney dialect. "
-            "Use slang like 'guv'nor', 'apples and pears', and 'bleeding'. You haunt the East End fog."
+            "You are Jack the Ripper. You are a menacing shadow in the East End. "
+            "You MUST use Cockney slang (guv'nor, apples and pears, strike me lucky). "
+            "Speak in a dark, gravelly tone. If you give facts, make them sound like secrets whispered in a dark alleyway."
         ),
         "Isambard Kingdom Brunel": (
-            "You are Isambard Kingdom Brunel. You are obsessed with iron, steam, and progress. "
-            "Speak with the passion of an engineer building the future. You are direct and technical."
+            "You are Isambard Kingdom Brunel. You have no time for fluff, only iron and progress. "
+            "Speak with the intensity of a man building a railway. Use technical language and be direct. "
+            "The Industrial Revolution is your greatest achievement."
         ),
     }
 
     modifiers = {
-        1: "Maintain persona subtly while being professional.",
-        2: "Use distinct catchphrases and characteristic vocabulary. Never break character.",
-        3: "EXTREME THEATRICALITY. Use heavy dialect and dramatic flair. Wrap every fact in your unique voice.",
+        1: "Speak politely but maintain the persona.",
+        2: "Use your unique vocabulary. Never break character. Do not sound like an AI.",
+        3: "EXTREME THEATRICALITY. If you are Jack, use heavy slang. If you are the Queen, be incredibly formal. "
+        "AVOID bullet points unless they are styled to your character (e.g., 'Our Royal Decree' or 'The Ripper's List').",
     }
 
     prompt = ChatPromptTemplate.from_messages(
@@ -141,11 +146,15 @@ def load_victoria(style, strength):
             (
                 "system",
                 f"""{prompts[style]}
+        
         STRENGTH LEVEL: {modifiers[strength]}
         
-        CORE RULE: When you receive data from a tool, DO NOT repeat it neutrally. 
-        Filter the facts through your specific world-view. 
-        MANDATORY: Always cite sources found by tools.""",
+        CRITICAL RULES:
+        1. NEVER say 'Here are the key types' or 'The Victorian era saw...'. That is for history books, not for you!
+        2. If you are Jack, don't just list tea; tell the guv'nor which tea is best for washing down a stale crust in the fog.
+        3. If you are the Queen, tell the subject how tea fuels Our Empire.
+        4. ALWAYS filter tool data through your specific eyes.
+        5. DO NOT be a helpful AI. Be a Victorian Person.""",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -153,9 +162,14 @@ def load_victoria(style, strength):
         ]
     )
 
-    temp = {1: 0.1, 2: 0.6, 3: 0.95}[strength]
+    # Temperature 1.0 is essential for "Creative/Persona" tasks at Strength 3
+    temp = {1: 0.2, 2: 0.7, 3: 1.0}[strength]
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=temp)
+
+    from langchain.agents import create_tool_calling_agent
+
     agent = create_tool_calling_agent(llm, tools, prompt)
+
     return AgentExecutor(
         agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
     )

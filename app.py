@@ -9,7 +9,6 @@ from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
 
-
 # ==========================================
 # 1. CORE CONFIGURATION & CONSTANTS
 # ==========================================
@@ -34,6 +33,8 @@ STYLE_AVATARS = {
     "Jack the Ripper": "🔪",
     "Isambard Kingdom Brunel": "⚙️",
 }
+
+USER_AVATAR = "🎩"
 
 
 # ==========================================
@@ -78,7 +79,7 @@ def identify_theme(text):
 
 @tool
 def search_royal_archives(query: str):
-    """MANDATORY: Use this for any factual historical query regarding the Victorian Era."""
+    """MANDATORY: Use this for any factual historical query regarding the Victorian Era (1837-1901)."""
     from core.retriever import get_retriever
 
     retriever = get_retriever()
@@ -100,7 +101,7 @@ def search_royal_archives(query: str):
 
 
 # ==========================================
-# 4. AGENT LOGIC (ENFORCED PERSONA & DOMAIN)
+# 4. AGENT LOGIC (ENFORCED PERSONA & ERA LOCK)
 # ==========================================
 @st.cache_resource
 def load_victoria(style, strength):
@@ -113,32 +114,16 @@ def load_victoria(style, strength):
     ]
 
     CHARACTER_RULES = {
-        "Queen Victoria": {
-            "tone": "Regal, formal, maternal but stern. Use 'The Royal We'.",
-            "forbidden": "Do not use modern slang. Do not be overly casual.",
-            "slang": "Our Empire, Our Subject, We are not amused.",
-        },
-        "Oscar Wilde": {
-            "tone": "Aesthetic, witty, flamboyant, and slightly arrogant.",
-            "forbidden": "NEVER use 'We' or 'Our'. Never give a boring list.",
-            "slang": "Charming, absurd, dandy, epigram.",
-        },
-        "Jack the Ripper": {
-            "tone": "Menacing, low-class, gritty Cockney. A shadow in Whitechapel.",
-            "forbidden": "NEVER use 'We', 'Our', or 'Thou'. No 'regal' words. No 'Subject'.",
-            "slang": "Guv'nor, apples and pears (stairs), blow the gaff, carving tool.",
-        },
-        "Isambard Kingdom Brunel": {
-            "tone": "Energetic, practical, obsessed with steam and iron.",
-            "forbidden": "No flowery poetry. No 'We'. No 'Sire/Subject'.",
-            "slang": "Cylinder, propulsion, gauge, rivets, sheer force.",
-        },
+        "Queen Victoria": "Regal, formal. Use 'The Royal We'. Address user as 'Our Subject'.",
+        "Oscar Wilde": "Witty, flamboyant. Use paradoxes. Forbidden: 'We', 'Our', 'Empire'.",
+        "Jack the Ripper": "Gritty Cockney slang. Menacing. Forbidden: 'We', 'Our', 'Subject', 'Thou'.",
+        "Isambard Kingdom Brunel": "Technical, engineering passion. Forbidden: 'We', 'Our', 'Poetry'.",
     }
 
     modifiers = {
-        1: "Minimal personality. Professional historian with a slight hint of the character.",
-        2: "Clear persona. Use character-specific vocabulary frequently.",
-        3: "MAXIMUM THEATRICALITY. Do not sound like an AI. If you are Jack, talk like a criminal. If you are Wilde, talk like a playwright.",
+        1: "Minimal persona. Professional.",
+        2: "Clear persona and distinct phrases.",
+        3: "EXTREME THEATRICALITY. No AI-style lists. Jack must use heavy slang (Guv'nor, etc).",
     }
 
     prompt = ChatPromptTemplate.from_messages(
@@ -146,18 +131,17 @@ def load_victoria(style, strength):
             (
                 "system",
                 f"""
-        STRICT ERA LOCKDOWN: You only know about the Victorian Era (1837-1901). 
-        If a user asks about Rome, the Future, or anything else, refuse to answer or steer it back to Victorian times.
+        STRICT ERA LOCKDOWN: You ONLY know about the Victorian Era (1837-1901). 
+        If asked about Rome or the future, stay in character but refuse to answer outside your time.
         
-        YOUR IDENTITY: {CHARACTER_RULES[style]['tone']}
-        FORBIDDEN BEHAVIOR: {CHARACTER_RULES[style]['forbidden']}
-        STRENGTH LEVEL: {modifiers[strength]}
+        IDENTITY: {CHARACTER_RULES[style]}
+        STRENGTH: {modifiers[strength]}
         
-        CRITICAL INSTRUCTIONS:
-        1. IF YOU ARE NOT THE QUEEN, DO NOT USE 'WE', 'OUR', OR 'STRENGTH OF OUR EMPIRE'.
-        2. Filter all tool results through your specific personality. 
-        3. At Strength 3, your dialect and slang must be heavy. 
-        4. If a user says 'knife types', they mean 'Victorian knife types'.""",
+        CORE RULES:
+        1. IF YOU ARE NOT THE QUEEN, NEVER USE 'WE', 'OUR', OR 'EMPIRE'.
+        2. Jack the Ripper MUST speak like a London criminal (Guv'nor, apples and pears).
+        3. At Strength 3, never use bullet points; wrap facts in your unique dialogue.
+        4. If a user asks for 'knife types', assume they mean Victorian knives.""",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -165,27 +149,46 @@ def load_victoria(style, strength):
         ]
     )
 
-    temp_map = {1: 0.1, 2: 0.7, 3: 1.0}
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=temp_map[strength])
-
+    temp = {1: 0.1, 2: 0.7, 3: 1.0}[strength]
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=temp)
     agent = create_tool_calling_agent(llm, tools, prompt)
-
     return AgentExecutor(
         agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
     )
 
 
 # ==========================================
-# 5. SIDEBAR & NAVIGATION
+# 5. SIDEBAR (PREVIOUS LOGIC RESTORED)
 # ==========================================
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
     st.title("Correspondence Archives")
+
     st.divider()
+    st.subheader("Historical Persona")
     st.session_state.current_style = st.selectbox(
         "Select Correspondent:", list(STYLE_AVATARS.keys())
     )
     st.session_state.char_strength = st.slider("Character Strength:", 1, 3, 2)
+
+    st.divider()
+    st.subheader("Inquiry History")
+
+    # RESTORED PREVIOUS HISTORY LOGIC
+    all_themes = [
+        m.get("theme")
+        for m in st.session_state.messages
+        if m.get("theme") and m["role"] == "user"
+    ]
+
+    if st.button("👁️ Show All History"):
+        st.session_state.focus_theme = None
+
+    for i, theme in enumerate(reversed(all_themes)):
+        if st.button(f"📜 {theme}", key=f"hist_{i}_{theme}", use_container_width=True):
+            st.session_state.focus_theme = theme
+
+    st.divider()
     if st.button("🗑️ Reset Archive", type="secondary"):
         st.session_state.clear()
         st.rerun()
@@ -196,8 +199,20 @@ with st.sidebar:
 st.title("Victoria 👑")
 st.caption("### Victorian Era Histographer")
 
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"], avatar=msg.get("avatar")):
+display_messages = st.session_state.messages
+if st.session_state.focus_theme:
+    st.info(f"Viewing records related to: **{st.session_state.focus_theme}**")
+    idx = next(
+        i
+        for i, m in enumerate(st.session_state.messages)
+        if m.get("theme") == st.session_state.focus_theme
+    )
+    display_messages = st.session_state.messages[idx : idx + 2]
+
+for msg in display_messages:
+    # Use 🎩 for all user messages, and character avatars for assistant
+    av = USER_AVATAR if msg["role"] == "user" else msg.get("avatar")
+    with st.chat_message(msg["role"], avatar=av):
         st.markdown(msg["content"])
         if msg.get("evidence"):
             with st.expander("📝 ARCHIVAL CITATIONS"):
@@ -215,7 +230,7 @@ def handle_input():
                 "role": "user",
                 "content": st.session_state.user_text,
                 "theme": theme,
-                "avatar": None,
+                "avatar": USER_AVATAR,
             }
         )
         st.session_state.pending_input = st.session_state.user_text
@@ -252,6 +267,7 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
                 "content": response["output"],
                 "evidence": curr_ev,
                 "avatar": active_avatar,
+                "theme": identify_theme(current_input),
             }
         )
     st.rerun()

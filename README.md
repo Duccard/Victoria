@@ -29,16 +29,16 @@ The primary goal of Victoria is to provide a grounded historical research tool w
 ---
 
 VICTORIA/
-├── core/
-│   ├── retriever.py      # Logic for ChromaDB connection and document retrieval
-│   └── tools.py          # Custom LangChain tools (Currency, Stats)
-├── data/
-│   ├── chroma_db/        # Persistent vector store index
-│   └── [PDFs]            # Primary sources (Sadler Report, Mines Act, etc.)
-├── app.py                # Main Streamlit application and Agent logic
-├── requirements.txt      # Project dependencies
-├── .env                  # Environment variables (OpenAI API Key)
-└── .gitignore            # Files excluded from version control
+- core/
+    -retriever.py      # Logic for ChromaDB connection and document retrieval
+    -tools.py          # Custom LangChain tools (Currency, Stats)
+data/
+    -chroma_db/        # Persistent vector store index
+    -[PDFs]            # Primary sources (Sadler Report, Mines Act, etc.)
+- app.py                # Main Streamlit application and Agent logic
+- requirements.txt      # Project dependencies
+- .env                  # Environment variables (OpenAI API Key)
+- .gitignore            # Files excluded from version control
 
 ## Project Architecture
 

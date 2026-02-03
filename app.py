@@ -85,7 +85,6 @@ from core.retriever import get_retriever
 
 @tool
 def search_royal_archives(query: str):
-    """MANDATORY: Consult the archives for every historical fact."""
     retriever = get_retriever()
     docs = retriever.invoke(query)
     evidence_list = []
@@ -107,20 +106,19 @@ def search_royal_archives(query: str):
 # 5. MAIN INTERFACE
 # ==========================================
 st.title("Victoria 👑")
-st.markdown("#### Victorian Era Histographer")  # Medium-Small Subtitle
+st.markdown("#### Victorian Era Histographer")
 
 AVATARS = {
     "Queen Victoria": "👑",
     "Oscar Wilde": "🎭",
     "Jack the Ripper": "🔪",
-    "Isambard Kingdom Brunel": "⚙️",  # Brunel is a Cog
+    "Isambard Kingdom Brunel": "⚙️",
     "user": "🎩",
 }
 
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/settings.png")
     st.title("Settings")
-
     style_choice = st.selectbox("Select Correspondent:", list(AVATARS.keys())[:-1])
     st.session_state.current_style = style_choice
 
@@ -169,7 +167,9 @@ for msg in display_messages:
 
 st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 
-# ================= 6. EXECUTION  =================
+# ==========================================
+# 6. EXECUTION
+# ==========================================
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
@@ -185,7 +185,11 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
         [
             (
                 "system",
-                f"You are {st.session_state.current_style}. Be charismatic. MANDATORY: Search archives for ALL facts.",
+                f"You are {st.session_state.current_style}. "
+                "MANDATORY: For every factual historical query, call 'search_royal_archives'. "
+                "Include explicit citations from the retrieved documents in your answer. "
+                "If no documents are found, respond truthfully that the archive has no evidence. "
+                "Be charismatic and immersive in your character.",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -211,7 +215,12 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
         evidence = st.session_state.temp_evidence
         if evidence:
             with st.expander("📝 ARCHIVAL EVIDENCE", expanded=True):
-                st.table(evidence)
+                st.table(
+                    [
+                        {"Source Title": e["Source Title"], "Page": e["Page"]}
+                        for e in evidence
+                    ]
+                )
 
         last_theme = next(
             (

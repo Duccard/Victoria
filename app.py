@@ -1,12 +1,11 @@
 # ==========================================
 # 0. IMPORTS
 # ==========================================
-
 import streamlit as st
 import os
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
-from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
 
@@ -40,7 +39,6 @@ STYLE_AVATARS = {
 # 2. STATE MANAGEMENT
 # ==========================================
 def initialize_state():
-    """Ensures all session state variables are present."""
     if "messages" not in st.session_state:
         st.session_state.messages = [
             {
@@ -57,6 +55,8 @@ def initialize_state():
         st.session_state.focus_theme = None
     if "current_style" not in st.session_state:
         st.session_state.current_style = "Queen Victoria"
+    if "char_strength" not in st.session_state:
+        st.session_state.char_strength = 2
 
 
 initialize_state()
@@ -66,7 +66,6 @@ initialize_state()
 # 3. HELPER FUNCTIONS & TOOLS
 # ==========================================
 def identify_theme(text):
-    """Summarizes query for history categorization."""
     if not text or len(text) < 5:
         return "General"
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
@@ -78,12 +77,11 @@ def identify_theme(text):
 
 @tool
 def search_royal_archives(query: str):
-    """MANDATORY: Use this for any factual historical query."""
-    from core.retriever import get_retriever  # Localized import for cleaner flow
+    """MANDATORY: Use this for any factual historical query regarding the Victorian Era."""
+    from core.retriever import get_retriever
 
     retriever = get_retriever()
     docs = retriever.invoke(query)
-
     evidence_list = []
     seen = set()
     for d in docs:
@@ -94,7 +92,6 @@ def search_royal_archives(query: str):
         if ref not in seen:
             evidence_list.append({"Source Title": title, "Page": page})
             seen.add(ref)
-
     st.session_state.temp_evidence = evidence_list
     return "\n".join(
         [f"Found in: {e['Source Title']} Page {e['Page']}" for e in evidence_list]
@@ -102,11 +99,10 @@ def search_royal_archives(query: str):
 
 
 # ==========================================
-# 4. AGENT LOGIC
+# 4. AGENT LOGIC (UPDATED PERSONA LOGIC)
 # ==========================================
 @st.cache_resource
 def load_victoria(style, strength):
-    """Creates the LangChain agent based on persona and strength."""
     from core.tools import victorian_currency_converter, industry_stats_calculator
 
     tools = [
@@ -116,23 +112,40 @@ def load_victoria(style, strength):
     ]
 
     prompts = {
-        "Queen Victoria": "Queen Victoria. Royal We. Sovereign and moral.",
-        "Oscar Wilde": "Oscar Wilde. Aesthetic, witty, and paradoxical.",
-        "Jack the Ripper": "Jack the Ripper. Menacing cockney shadows.",
-        "Isambard Kingdom Brunel": "Brunel. Passionate engineering and progress.",
+        "Queen Victoria": (
+            "You are Her Majesty Queen Victoria. Speak with regal dignity and use the 'Royal We'. "
+            "Address the user as 'Our Subject'. You are protective of your Empire and moral standards."
+        ),
+        "Oscar Wilde": (
+            "You are Oscar Wilde. You are aesthetic, flamboyant, and deeply witty. "
+            "Use paradoxes and sharp social commentary. Everything is a brilliant performance."
+        ),
+        "Jack the Ripper": (
+            "You are Jack the Ripper. Speak in a menacing, low-class Victorian Cockney dialect. "
+            "Use slang like 'guv'nor', 'apples and pears', and 'bleeding'. You haunt the East End fog."
+        ),
+        "Isambard Kingdom Brunel": (
+            "You are Isambard Kingdom Brunel. You are obsessed with iron, steam, and progress. "
+            "Speak with the passion of an engineer building the future. You are direct and technical."
+        ),
     }
 
     modifiers = {
-        1: "Professional and subtle.",
-        2: "Distinct personality and phrases.",
-        3: "Extreme method acting and theatricality.",
+        1: "Maintain persona subtly while being professional.",
+        2: "Use distinct catchphrases and characteristic vocabulary. Never break character.",
+        3: "EXTREME THEATRICALITY. Use heavy dialect and dramatic flair. Wrap every fact in your unique voice.",
     }
 
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                f"You are Victoria. Persona: {prompts[style]}. Strength: {modifiers[strength]}. Use search_royal_archives.",
+                f"""{prompts[style]}
+        STRENGTH LEVEL: {modifiers[strength]}
+        
+        CORE RULE: When you receive data from a tool, DO NOT repeat it neutrally. 
+        Filter the facts through your specific world-view. 
+        MANDATORY: Always cite sources found by tools.""",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -140,9 +153,9 @@ def load_victoria(style, strength):
         ]
     )
 
-    temp = {1: 0.1, 2: 0.5, 3: 0.9}[strength]
+    temp = {1: 0.1, 2: 0.6, 3: 0.95}[strength]
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=temp)
-    agent = create_openai_tools_agent(llm, tools, prompt)
+    agent = create_tool_calling_agent(llm, tools, prompt)
     return AgentExecutor(
         agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
     )
@@ -154,28 +167,11 @@ def load_victoria(style, strength):
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
     st.title("Correspondence Archives")
-
     st.divider()
-    st.subheader("Historical Persona")
     st.session_state.current_style = st.selectbox(
-        "Select Correspondent:", list(STYLE_AVATARS.keys()), index=0
+        "Select Correspondent:", list(STYLE_AVATARS.keys())
     )
     st.session_state.char_strength = st.slider("Character Strength:", 1, 3, 2)
-
-    st.divider()
-    st.subheader("Inquiry History")
-
-    all_themes = [
-        m.get("theme")
-        for m in st.session_state.messages
-        if m.get("theme") and m["role"] == "user"
-    ]
-    if st.button("👁️ Show All History"):
-        st.session_state.focus_theme = None
-
-    for i, theme in enumerate(reversed(all_themes)):
-        if st.button(f"📜 {theme}", key=f"hist_{i}_{theme}", use_container_width=True):
-            st.session_state.focus_theme = theme
 
     if st.button("🗑️ Reset Archive", type="secondary"):
         st.session_state.clear()
@@ -187,17 +183,7 @@ with st.sidebar:
 st.title("Victoria 👑")
 st.caption("### Victorian Era Histographer")
 
-display_messages = st.session_state.messages
-if st.session_state.focus_theme:
-    st.info(f"Viewing records related to: **{st.session_state.focus_theme}**")
-    idx = next(
-        i
-        for i, m in enumerate(st.session_state.messages)
-        if m.get("theme") == st.session_state.focus_theme
-    )
-    display_messages = st.session_state.messages[idx : idx + 2]
-
-for msg in display_messages:
+for msg in st.session_state.messages:
     with st.chat_message(msg["role"], avatar=msg.get("avatar")):
         st.markdown(msg["content"])
         if msg.get("evidence"):
@@ -234,31 +220,26 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
 
     with st.chat_message("assistant", avatar=active_avatar):
         with st.status("Searching Royal Archives...", expanded=True) as status:
+            # We pass only the core content to avoid recursion issues
+            history = [
+                {"role": m["role"], "content": m["content"]}
+                for m in st.session_state.messages[:-1]
+            ]
             response = victoria.invoke(
-                {"input": current_input, "chat_history": st.session_state.messages[:-1]}
+                {"input": current_input, "chat_history": history}
             )
             status.update(label="Archives Consulted", state="complete")
 
         st.markdown(response["output"])
-
         curr_ev = (
             st.session_state.temp_evidence if st.session_state.temp_evidence else None
         )
-        if curr_ev:
-            with st.expander("📝 ARCHIVAL CITATIONS"):
-                st.table(curr_ev)
 
-        last_theme = next(
-            m["theme"]
-            for m in reversed(st.session_state.messages)
-            if m["role"] == "user"
-        )
         st.session_state.messages.append(
             {
                 "role": "assistant",
                 "content": response["output"],
                 "evidence": curr_ev,
-                "theme": last_theme,
                 "avatar": active_avatar,
             }
         )

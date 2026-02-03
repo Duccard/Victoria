@@ -210,7 +210,7 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
     with st.chat_message("assistant"):
-        with st.status("Consulting Archives...", expanded=True) as status:
+        with st.status("Searching the Royal Archives...", expanded=True) as status:
             response = victoria.invoke(
                 {"input": current_input, "chat_history": st.session_state.messages[:-1]}
             )

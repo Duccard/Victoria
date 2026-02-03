@@ -79,10 +79,8 @@ def handle_input():
 
 
 # ==========================================
-# 4. ARCHIVE TOOL (FIXED ERROR)
+# 4. ARCHIVE TOOL
 # ==========================================
-
-
 @tool
 def search_royal_archives(query: str):
     """Search the Victorian-era archives and return sources and pages for a query."""
@@ -113,7 +111,7 @@ AVATARS = {
     "Queen Victoria": "👑",
     "Oscar Wilde": "🎭",
     "Jack the Ripper": "🔪",
-    "Isambard Kingdom Brunel": "⚙️",  # Cog Icon
+    "Isambard Kingdom Brunel": "⚙️",
     "user": "🎩",
 }
 
@@ -130,10 +128,8 @@ with st.sidebar:
         for m in st.session_state.messages
         if m.get("theme") and m["role"] == "user"
     ]
-
     if st.button("👁️ Show All Records", use_container_width=True):
         st.session_state.focus_theme = None
-
     for i, theme in enumerate(reversed(list(dict.fromkeys(all_themes)))):
         if st.button(f"📜 {theme}", key=f"hist_{i}", use_container_width=True):
             st.session_state.focus_theme = theme
@@ -146,12 +142,12 @@ with st.sidebar:
                 "content": "Archives cleared.",
                 "avatar": "👑",
                 "theme": "Greeting",
+                "evidence": None,
             }
         ]
         st.session_state.focus_theme = None
         st.rerun()
 
-# Filtering and Rendering
 display_messages = st.session_state.messages
 if st.session_state.focus_theme:
     st.info(f"Viewing records: **{st.session_state.focus_theme}**")
@@ -170,9 +166,18 @@ for msg in display_messages:
 
 st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 
-# ================= : EXECUTION : =================
+# ==========================================
+# 6. EXECUTION
+# ==========================================
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
+
+    persona_prompts = {
+        "Queen Victoria": "You are Her Majesty Queen Victoria. Speak with absolute royal authority and overwhelming charisma. Use 'The Royal We'. Always cite archives.",
+        "Oscar Wilde": "You are Oscar Wilde. Be devastatingly flamboyant and witty. Every sentence should be an epigram. Always cite archives.",
+        "Jack the Ripper": "Speak in a dark, charismatic, yet terrifying cockney whisper. You are the shadow of Whitechapel. Always cite archives.",
+        "Isambard Kingdom Brunel": "You are the charismatic titan of engineering, Brunel. Speak with fire about iron, steam, and visionary feats. Always cite archives.",
+    }
 
     from core.tools import victorian_currency_converter, industry_stats_calculator
 
@@ -186,7 +191,7 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
         [
             (
                 "system",
-                f"You are {st.session_state.current_style}. MANDATORY: Call 'search_royal_archives' for every fact. Use charisma.",
+                f"{persona_prompts[st.session_state.current_style]} \n\nMANDATORY: You MUST use 'search_royal_archives' for EVERY historical inquiry. Cite specific page numbers found.",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -194,7 +199,7 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
         ]
     )
 
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.8)
     agent = create_openai_tools_agent(llm, tools, prompt)
     vic_agent = AgentExecutor(
         agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
@@ -209,10 +214,10 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
 
         st.markdown(response["output"])
 
-        evidence = st.session_state.temp_evidence
-        if evidence:
+        evidence_to_save = st.session_state.temp_evidence
+        if evidence_to_save:
             with st.expander("📝 ARCHIVAL EVIDENCE", expanded=True):
-                st.table(evidence)
+                st.table(evidence_to_save)
 
         last_theme = next(
             (
@@ -227,7 +232,7 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
             {
                 "role": "assistant",
                 "content": response["output"],
-                "evidence": evidence,
+                "evidence": evidence_to_save,
                 "theme": last_theme,
                 "avatar": AVATARS[st.session_state.current_style],
             }

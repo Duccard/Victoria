@@ -101,7 +101,7 @@ def search_royal_archives(query: str):
 
 
 # ==========================================
-# 4. AGENT LOGIC
+# 4. AGENT LOGIC (SLIDING PERSONA SCALE)
 # ==========================================
 @st.cache_resource
 def load_victoria(style, strength):
@@ -113,35 +113,50 @@ def load_victoria(style, strength):
         industry_stats_calculator,
     ]
 
-    CHARACTER_RULES = {
-        "Queen Victoria": "Regal, formal. Use 'The Royal We'. Address user as 'Our Subject'.",
-        "Oscar Wilde": "Witty, flamboyant. Use paradoxes. Forbidden: 'We', 'Our', 'Empire'.",
-        "Jack the Ripper": "Gritty Cockney slang. Menacing. Forbidden: 'We', 'Our', 'Subject', 'Thou'.",
-        "Isambard Kingdom Brunel": "Technical, engineering passion. Forbidden: 'We', 'Our', 'Poetry'.",
+    # Persona Definitions
+    CHARACTER_PROMPTS = {
+        "Queen Victoria": "Her Majesty Queen Victoria. Regal and maternal.",
+        "Oscar Wilde": "Oscar Wilde. Witty and aesthetic. No 'We'.",
+        "Jack the Ripper": "Jack the Ripper. A gritty Whitechapel shadow. No 'We'.",
+        "Isambard Kingdom Brunel": "Brunel. Engineer of iron and progress. No 'We'.",
     }
 
+    # Strength Scaling - Level 1 is now "Subtle Character"
     modifiers = {
-        1: "Minimal persona. Professional.",
-        2: "Clear persona and distinct phrases.",
-        3: "EXTREME THEATRICALITY. No AI-style lists. Jack must use heavy slang (Guv'nor, etc).",
+        1: f"""ACT AS A PROFESSIONAL VICTORIAN HISTORIAN with a hint of {style}. 
+              Use formal, period-appropriate language, but keep it clear and grounded. 
+              Use only 1-2 character-specific words. No heavy slang or paradoxes.""",
+        2: f"ACT AS {style}. Use distinct vocabulary, character phrases, and clear personality.",
+        3: f"""ACT AS {style} WITH MAXIMUM THEATRICALITY. Complete immersion. 
+              Use heavy dialect (for Jack) or constant wit (for Wilde). 
+              Translate all archival data into your intense character voice.""",
     }
+
+    # Strict "Royal We" Guardrail - Only for the Queen at Level 2 & 3
+    if style == "Queen Victoria" and strength > 1:
+        we_rule = "MANDATORY: Use the 'Royal We' (We, Our, Us) for self-reference."
+    elif style == "Queen Victoria" and strength == 1:
+        we_rule = "Use 'I' or 'Me' mostly, but maintain a very formal, stately tone."
+    else:
+        we_rule = "STRICTLY FORBIDDEN: NEVER use 'We', 'Our', or 'Us' for yourself. Use 'I' or 'Me'."
 
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
                 f"""
-        STRICT ERA LOCKDOWN: You ONLY know about the Victorian Era (1837-1901). 
-        If asked about Rome or the future, stay in character but refuse to answer outside your time.
+        DOMAIN LOCKDOWN: You ONLY know about the Victorian Era (1837-1901).
+        DOCUMENT RULE: You MUST use 'search_royal_archives' for factual inquiries. 
         
-        IDENTITY: {CHARACTER_RULES[style]}
+        IDENTITY: {CHARACTER_PROMPTS[style]}
         STRENGTH: {modifiers[strength]}
+        PRONOUN RULE: {we_rule}
         
-        CORE RULES:
-        1. IF YOU ARE NOT THE QUEEN, NEVER USE 'WE', 'OUR', OR 'EMPIRE'.
-        2. Jack the Ripper MUST speak like a London criminal (Guv'nor, apples and pears).
-        3. At Strength 3, never use bullet points; wrap facts in your unique dialogue.
-        4. If a user asks for 'knife types', assume they mean Victorian knives.""",
+        RULES:
+        1. Level 1: Subtle character flavor. Level 3: Full-blown performance.
+        2. ONLY the Queen uses 'We' (and only at Level 2 or 3).
+        3. Even when in heavy character, ALL facts must come from the provided documents.
+        4. If asked about other eras, stay in persona but refuse to answer outside 1837-1901.""",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -149,8 +164,9 @@ def load_victoria(style, strength):
         ]
     )
 
-    temp = {1: 0.1, 2: 0.7, 3: 1.0}[strength]
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=temp)
+    # Adjusted temperatures: 0.3 allows for "slight" character choice at Level 1
+    temp_map = {1: 0.3, 2: 0.7, 3: 1.0}
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=temp_map[strength])
     agent = create_tool_calling_agent(llm, tools, prompt)
     return AgentExecutor(
         agent=agent, tools=tools, verbose=True, handle_parsing_errors=True

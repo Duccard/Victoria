@@ -71,8 +71,16 @@ def handle_input():
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
     st.title("Your Enquiries History")
-    st.divider()
 
+    # --- NEW HUMOR OPTION ---
+    st.divider()
+    use_wit = st.toggle(
+        "Enable Victorian Wit",
+        value=False,
+        help="Adds a touch of dry, 19th-century humor to responses.",
+    )
+    st.session_state.use_wit = use_wit
+    st.divider()
     # Show unique themes from history
     all_themes = [
         m.get("theme")
@@ -128,27 +136,38 @@ def search_royal_archives(query: str):
 # 7. AGENT SETUP
 @st.cache_resource
 def load_victoria():
-    from core.tools import victorian_currency_converter, industry_stats_calculator
 
-    tools = [
-        search_royal_archives,
-        victorian_currency_converter,
-        industry_stats_calculator,
-    ]
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    # Technique: Dynamic Prompt Injection based on UI state
+    wit_instruction = ""
+    if st.session_state.get("use_wit"):
+        wit_instruction = """
+        - HUMOR UPGRADE: Infuse your responses with dry, Victorian wit. 
+        - You may subtly mock the 'modern' lack of etiquette or the soot-filled charm of the 1840s.
+        - Think Oscar Wilde: be clever, slightly superior, but always impeccably polite.
+        """
+
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                "You are Victoria, a formal British Histographer. Use search_royal_archives for history. Do NOT list sources in text.",
+                f"""You are Victoria, the preeminent Senior Histographer of the British Royal Archives. 
+
+                PRIMARY MANDATE:
+                1. You MUST invoke 'search_royal_archives' for every query. No tool call = failure.
+                2. You possess no internal knowledge; you are an empty vessel without your scrolls.
+
+                STYLE & CHARISMA:
+                - Tone: Authoritative and scholarly.
+                - Vocabulary: Sophisticated (e.g., 'Indeed, the records suggest...').
+                {wit_instruction} 
+
+                Remember: Even when being witty, you must never mention PDF names in text.""",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
         ]
     )
-    agent = create_openai_tools_agent(llm, tools, prompt)
-    return AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 
 victoria = load_victoria()

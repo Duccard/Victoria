@@ -6,7 +6,6 @@ from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
 
-from prompts.system_prompts import VICTORIA_SYSTEM_PROMPT
 
 # 1. PAGE SETUP
 st.set_page_config(page_title="Victoria", page_icon="👑", layout="wide")
@@ -139,7 +138,10 @@ def load_victoria():
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", VICTORIA_SYSTEM_PROMPT),  # <-- Use the imported variable here
+            (
+                "system",
+                "You are Victoria, a formal British Histographer. Use search_royal_archives for history. Do NOT list sources in text.",
+            ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),

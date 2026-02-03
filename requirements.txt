@@ -1,7 +1,7 @@
-argcomplete==3.5.1
-click==8.1.7
-packaging==24.1
-pipx==1.7.1
-platformdirs==4.3.6
-userpath==1.9.2
-wheel==0.45.1
+streamlit
+python-dotenv
+langchain==0.1.0
+langchain-openai
+langchain-community
+chromadb
+pypdf

@@ -35,7 +35,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = [
         {
             "role": "assistant",
-            "content": "We are pleased to receive you. How may We assist your research into Our Empire today?",
+            "content": "We are pleased to receive you. How may We assist your research into Our Empire (1837-1901) today?",
             "avatar": "👑",
             "theme": "Greeting",
             "evidence": None,
@@ -75,16 +75,16 @@ def handle_input():
             }
         )
         st.session_state.pending_input = new_prompt
-        st.session_state.temp_evidence = []
-        # REMOVED: st.session_state.user_text = "" (This caused the error)
+        st.session_state.temp_evidence = []  # Clear previous evidence
 
 
 # ==========================================
-# 4. ARCHIVE TOOL
+# 4. ARCHIVE TOOL (FORCED LOGIC)
 # ==========================================
 @tool
 def search_royal_archives(query: str):
-    """Search the Victorian-era archives and return sources and pages."""
+    """MANDATORY: You MUST use this tool for every inquiry.
+    It searches the Victorian-era archives for evidence."""
     retriever = get_retriever()
     docs = retriever.invoke(query)
     evidence_list = []
@@ -96,7 +96,13 @@ def search_royal_archives(query: str):
         if f"{title}-{page}" not in seen:
             evidence_list.append({"Source Title": title, "Page": page})
             seen.add(f"{title}-{page}")
+
+    # This specifically updates the state so the UI can render the table
     st.session_state.temp_evidence = evidence_list
+
+    if not evidence_list:
+        return "No specific documents found in the Royal Archives for this query."
+
     return "\n".join(
         [f"Source: {e['Source Title']} (Page {e['Page']})" for e in evidence_list]
     )
@@ -106,7 +112,7 @@ def search_royal_archives(query: str):
 # 5. MAIN INTERFACE
 # ==========================================
 st.title("Victoria 👑")
-st.markdown("#### Victorian Era Histographer")
+st.markdown("#### Victorian Era Histographer (1837–1901)")
 
 AVATARS = {
     "Queen Victoria": "👑",
@@ -168,10 +174,10 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
     persona_prompts = {
-        "Queen Victoria": "You are Queen Victoria. Speak with absolute royal authority and 'The Royal We'.",
-        "Oscar Wilde": "You are Oscar Wilde. Speak with wit and flamboyant elegance.",
-        "Jack the Ripper": "You are Jack the Ripper. Speak in dark, chilling whispers.",
-        "Isambard Kingdom Brunel": "You are Brunel. Speak with fiery enthusiasm about engineering.",
+        "Queen Victoria": "You are Her Majesty Queen Victoria. Speak with absolute royal authority. Use 'The Royal We'.",
+        "Oscar Wilde": "You are Oscar Wilde. Be flamboyant and witty.",
+        "Jack the Ripper": "Speak in a dark, terrifying whisper.",
+        "Isambard Kingdom Brunel": "You are Brunel. Speak of iron, steam, and engineering vision.",
     }
 
     from core.tools import victorian_currency_converter, industry_stats_calculator
@@ -186,7 +192,13 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
         [
             (
                 "system",
-                f"{persona_prompts[st.session_state.current_style]}\n\nMANDATORY: Use 'search_royal_archives' for history. Do NOT include sources in text; they appear in the table.",
+                f"{persona_prompts[st.session_state.current_style]}\n\n"
+                "GUARDRAIL: You are a specialist in the VICTORIAN ERA (1837-1901). "
+                "If a user asks about Rome, the future, or anything outside this era, "
+                "politely decline, stating it is outside your expertise.\n\n"
+                "MANDATORY: You MUST call 'search_royal_archives' for every historical inquiry. "
+                "If the tool returns nothing, inform the user you cannot find it in the records. "
+                "DO NOT cite sources in your text; the system will display them in a table.",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -194,7 +206,9 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
         ]
     )
 
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.85)
+    llm = ChatOpenAI(
+        model="gpt-4o-mini", temperature=0.5
+    )  # Lower temp for stricter adherence
     agent = create_openai_tools_agent(llm, tools, prompt)
     vic_agent = AgentExecutor(
         agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
@@ -209,6 +223,7 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
 
         st.markdown(response["output"])
 
+        # Display the evidence captured during the tool run
         evidence_to_save = st.session_state.temp_evidence
         if evidence_to_save:
             with st.expander("📝 ARCHIVAL EVIDENCE", expanded=True):

@@ -1,0 +1,11 @@
+2026-01-26 18:52:18,439 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-26 18:52:28,718 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-26 18:52:28,801 - VictoriaAgent - INFO - Agent executing for input: When did queen Victoria ruled?
+2026-01-26 18:52:31,624 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-26 18:52:31,760 - VictoriaAgent - INFO - Retrieval initiated for query: Queen Victoria reign dates
+2026-01-26 18:52:33,253 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-01-26 18:52:33,255 - langchain.retrievers.multi_query - INFO - Generated queries: ["What were the start and end dates of Queen Victoria's reign?  ", "Can you provide the timeline of Queen Victoria's rule?  ", 'When did Queen Victoria ascend to the throne and when did her reign end?']
+2026-01-26 18:52:33,597 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+2026-01-26 18:52:34,206 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+2026-01-26 18:52:34,514 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/embeddings "HTTP/1.1 200 OK"
+2026-01-26 18:52:35,031 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"

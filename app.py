@@ -3,11 +3,16 @@ import os
 import logging
 from datetime import datetime
 from dotenv import load_dotenv
+
+# LangChain Imports
 from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain.tools import tool
+
+# Modular Prompt Import
+from prompts.system_prompts import VICTORIA_SYSTEM_PROMPT
 
 # --- 0. TECHNICAL IMPLEMENTATION: LOGGING & MONITORING ---
 logging.basicConfig(
@@ -75,7 +80,7 @@ def handle_input():
         st.session_state.user_text = ""
 
 
-# 5. SIDEBAR
+# 5. SIDEBAR (Your Enquiries History)
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
     st.title("Your Enquiries History")
@@ -143,8 +148,7 @@ def search_royal_archives(query: str):
 def load_victoria():
     from core.tools import victorian_currency_converter, industry_stats_calculator
 
-    # --- TECHNICAL IMPLEMENTATION: RATE LIMITING ---
-    # Limits the agent to 1 request every 2 seconds to avoid API ban
+    # Rate Limiting Implementation
     rate_limiter = InMemoryRateLimiter(
         requests_per_second=0.5, check_every_n_seconds=0.1, max_bucket_size=10
     )
@@ -159,10 +163,7 @@ def load_victoria():
 
     prompt = ChatPromptTemplate.from_messages(
         [
-            (
-                "system",
-                "You are Victoria, a formal British Histographer. Use search_royal_archives for history. Do NOT list sources in text.",
-            ),
+            ("system", VICTORIA_SYSTEM_PROMPT),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
@@ -205,7 +206,6 @@ st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
-    # Basic Validation
     if not current_input.strip():
         st.warning("Please enter a valid historical inquiry.")
     elif len(current_input.split()) < 3 and "hello" in current_input.lower():
@@ -243,6 +243,7 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
                 if st.session_state.temp_evidence
                 else None
             )
+
             if curr_ev:
                 with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
                     st.table(curr_ev)

@@ -4,6 +4,12 @@
 
 Victoria is an advanced AI-driven research assistant designed to explore the Industrial Revolution through the eyes of its most iconic figures. By combining Retrieval-Augmented Generation (RAG) with dynamic persona modeling, Victoria transforms static historical archives into an immersive, conversational experience.
 
+## Deployment URL
+
+---
+
+https://victoria-histographer.streamlit.app/
+
 ## Main Function
 
 ---

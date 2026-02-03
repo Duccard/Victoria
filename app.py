@@ -81,6 +81,7 @@ with st.sidebar:
     )
     st.session_state.use_wit = use_wit
     st.divider()
+
     # Show unique themes from history
     all_themes = [
         m.get("theme")
@@ -134,12 +135,21 @@ def search_royal_archives(query: str):
 
 
 # 7. AGENT SETUP
+# We pass use_wit to the function so the cache clears when the toggle changes
 @st.cache_resource
-def load_victoria():
+def load_victoria(use_wit):
+    from core.tools import victorian_currency_converter, industry_stats_calculator
 
-    # Technique: Dynamic Prompt Injection based on UI state
+    # 1. DEFINE TOOLS
+    tools = [
+        search_royal_archives,
+        victorian_currency_converter,
+        industry_stats_calculator,
+    ]
+
+    # 2. DYNAMIC PROMPT INJECTION
     wit_instruction = ""
-    if st.session_state.get("use_wit"):
+    if use_wit:
         wit_instruction = """
         - HUMOR UPGRADE: Infuse your responses with dry, Victorian wit. 
         - You may subtly mock the 'modern' lack of etiquette or the soot-filled charm of the 1840s.
@@ -167,6 +177,17 @@ def load_victoria():
             ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
         ]
+    )
+
+    # 3. INITIALIZE LLM AND AGENT
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+    # This creates the logic for the agent
+    agent = create_openai_tools_agent(llm, tools, prompt)
+
+    # 4. RETURN THE EXECUTOR (This was missing!)
+    return AgentExecutor(
+        agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
     )
 
 

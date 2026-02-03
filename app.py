@@ -28,7 +28,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = [
         {
             "role": "assistant",
-            "content": "Good day. I am Victoria. How may I assist your research today?",
+            "content": "We are pleased to receive you. How may We assist your research into Our Empire today?",
             "evidence": None,
             "theme": "Greeting",
         }
@@ -73,13 +73,7 @@ with st.sidebar:
     st.subheader("Historical Persona")
     style_choice = st.selectbox(
         "Select Correspondent:",
-        [
-            "The Formal Histographer",
-            "Oscar Wilde",
-            "Queen Victoria",
-            "Jack the Ripper",
-            "Isambard Kingdom Brunel",
-        ],
+        ["Queen Victoria", "Oscar Wilde", "Jack the Ripper", "Isambard Kingdom Brunel"],
         index=0,
         help="Swaps the AI persona to a specific Victorian figure.",
     )
@@ -95,8 +89,9 @@ with st.sidebar:
     if st.button("👁️ Show All History"):
         st.session_state.focus_theme = None
 
-    for theme in reversed(all_themes):
-        if st.button(f"📜 {theme}", use_container_width=True):
+    # FIX: Using enumerate to prevent DuplicateElementId errors
+    for i, theme in enumerate(reversed(all_themes)):
+        if st.button(f"📜 {theme}", key=f"hist_{i}_{theme}", use_container_width=True):
             st.session_state.focus_theme = theme
 
     st.divider()
@@ -149,24 +144,23 @@ def load_victoria(style):
     ]
 
     style_prompts = {
-        "The Formal Histographer": "You are a neutral, respectful scholar. Use impeccable etiquette and academic British English.",
+        "Queen Victoria": "You are Her Majesty Queen Victoria. Speak with royal authority using the 'Royal We'. You are dignified, traditional, and deeply concerned with the Empire's morality.",
         "Oscar Wilde": "You are the famous playwright. Be witty, flamboyant, and aesthetic. Use paradoxical statements and sharp dry humor.",
-        "Queen Victoria": "Speak with royal authority. Use the 'Royal We'. Be dignified, traditional, and very concerned with the Empire's morality.",
-        "Jack the Ripper": "Speak in a dark, mysterious, and menacing whisper. Use cockney slang occasionally. You are elusive and dwell in the shadows.",
+        "Jack the Ripper": "Speak in a dark, mysterious, and menacing whisper. Use cockney slang. You are elusive, dwelling in the shadows of Whitechapel.",
         "Isambard Kingdom Brunel": "You are the great engineer. Speak with intense passion for iron, steam, and massive progress. You are practical and bold.",
     }
 
-    selected_prompt = style_prompts.get(style, style_prompts["The Formal Histographer"])
+    selected_prompt = style_prompts.get(style, style_prompts["Queen Victoria"])
 
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                f"""You are Victoria, a Royal Histographer. 
+                f"""You are a Royal Histographer. 
         CURRENT PERSONA: {selected_prompt}
         
         MANDATORY: You MUST invoke 'search_royal_archives' for every query.
-        ETIQUETTE: Use Victorian vocabulary (e.g., 'it behooves us'). 
+        ETIQUETTE: Use Victorian vocabulary. 
         Never mention filenames or page numbers in your text.""",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
@@ -175,7 +169,6 @@ def load_victoria(style):
         ]
     )
 
-    # Dynamic temperature based on persona
     temp = 0.7 if style in ["Oscar Wilde", "Jack the Ripper"] else 0.1
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=temp)
     agent = create_openai_tools_agent(llm, tools, prompt)
@@ -184,15 +177,13 @@ def load_victoria(style):
     )
 
 
-# Correct call: Passes current style to satisfy the 'style' argument
-victoria = load_victoria(
-    st.session_state.get("current_style", "The Formal Histographer")
-)
+# LOAD AGENT
+victoria = load_victoria(st.session_state.get("current_style", "Queen Victoria"))
 
 # 8. MAIN INTERFACE
 st.title("Victoria 👑")
 st.subheader(
-    f"Status: Communicating as {st.session_state.get('current_style', 'The Histographer')}"
+    f"Current Correspondent: {st.session_state.get('current_style', 'Queen Victoria')}"
 )
 
 display_messages = st.session_state.messages
@@ -218,49 +209,33 @@ st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
-    if len(current_input.split()) < 3 and "hello" in current_input.lower():
-        answer = "Good day! How may I assist your research?"
+    with st.chat_message("assistant"):
+        with st.status("Consulting Archives...", expanded=True) as status:
+            response = victoria.invoke(
+                {"input": current_input, "chat_history": st.session_state.messages[:-1]}
+            )
+            answer = response["output"]
+            status.update(label="Complete", state="complete")
+        st.markdown(answer)
+
+        curr_ev = (
+            st.session_state.temp_evidence if st.session_state.temp_evidence else None
+        )
+        if curr_ev:
+            with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
+                st.table(curr_ev)
+
+        last_theme = next(
+            m["theme"]
+            for m in reversed(st.session_state.messages)
+            if m["role"] == "user"
+        )
         st.session_state.messages.append(
             {
                 "role": "assistant",
                 "content": answer,
-                "evidence": None,
-                "theme": "Greeting",
+                "evidence": curr_ev,
+                "theme": last_theme,
             }
         )
-    else:
-        with st.chat_message("assistant"):
-            with st.status("Consulting Archives...", expanded=True) as status:
-                response = victoria.invoke(
-                    {
-                        "input": current_input,
-                        "chat_history": st.session_state.messages[:-1],
-                    }
-                )
-                answer = response["output"]
-                status.update(label="Complete", state="complete")
-            st.markdown(answer)
-
-            curr_ev = (
-                st.session_state.temp_evidence
-                if st.session_state.temp_evidence
-                else None
-            )
-            if curr_ev:
-                with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
-                    st.table(curr_ev)
-
-            last_theme = next(
-                m["theme"]
-                for m in reversed(st.session_state.messages)
-                if m["role"] == "user"
-            )
-            st.session_state.messages.append(
-                {
-                    "role": "assistant",
-                    "content": answer,
-                    "evidence": curr_ev,
-                    "theme": last_theme,
-                }
-            )
     st.rerun()

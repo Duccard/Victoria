@@ -79,38 +79,45 @@ def handle_input():
 
 
 # ==========================================
-# 4. ARCHIVE TOOL
+# 4. ARCHIVE TOOL (FIXED FOR BETTER HITS)
 # ==========================================
 @tool
 def search_royal_archives(query: str):
-    """YOU MUST CALL THIS TOOL FIRST for any historical question.
-    It searches Victorian archives and returns documentary evidence with sources and pages.
-    Always try related search terms (e.g., 'electric loom' → also search 'power loom', 'mechanical loom').
-    """
+    """MANDATORY: Use this first. Searches Victorian archives.
+    Now uses expanded search terms to ensure documents are found."""
 
     retriever = get_retriever()
 
-    search_queries = [query]
-    if "electric" in query.lower():
-        search_queries.append(
-            query.replace("electric", "power").replace("electrical", "power")
+    search_variations = [query]
+    low_query = query.lower()
+
+    if "loom" in low_query:
+        search_variations.extend(
+            ["Edmund Cartwright loom", "power loom 1785", "textile industry machines"]
         )
-        search_queries.append(query.replace("electric", "mechanical"))
-    if "loom" in query.lower():
-        search_queries.extend(
-            ["textile machinery", "weaving technology", "power loom invention"]
+    if "steam" in low_query:
+        search_variations.extend(
+            [
+                "Watt steam engine mechanics",
+                "steam power industrial revolution",
+                "locomotive engineering",
+            ]
+        )
+    if "lose" in low_query or "loss" in low_query:
+        search_variations.extend(
+            ["Crimean War casualties", "Boer War costs", "Irish Famine impact"]
         )
 
     all_docs = []
-    for q in search_queries[:3]:
-        docs = retriever.invoke(q)
+    for var in search_variations[:4]:
+        docs = retriever.invoke(var)
         all_docs.extend(docs)
 
     evidence_list = []
     seen = set()
     doc_snippets = []
 
-    for d in all_docs[:8]:
+    for d in all_docs:
         fname = os.path.basename(d.metadata.get("source", ""))
         title = SOURCE_TITLES.get(fname, fname)
         page = d.metadata.get("page", "N/A")
@@ -119,18 +126,15 @@ def search_royal_archives(query: str):
         if ref not in seen:
             evidence_list.append({"Source Title": title, "Page": page})
             seen.add(ref)
-            snippet = d.page_content.replace("\n", " ")[:350]
-            doc_snippets.append(f"📄 [{title}, Page {page}]:\n{snippet}\n")
+            snippet = d.page_content.replace("\n", " ")[:400]
+            doc_snippets.append(f"SOURCE: {title} (PG {page})\nCONTENT: {snippet}")
 
     st.session_state.temp_evidence = evidence_list
 
     if not evidence_list:
-        return f"⚠️ NO ARCHIVAL DOCUMENTS FOUND for queries: {', '.join(search_queries[:3])}"
+        return "The archives are silent on this specific phrasing. Try searching for names or technical terms."
 
-    result = f"✅ FOUND {len(evidence_list)} DOCUMENTS:\n\n" + "\n".join(
-        doc_snippets[:5]
-    )
-    return result
+    return "\n\n".join(doc_snippets[:6])
 
 
 # ==========================================

@@ -39,6 +39,7 @@ if "messages" not in st.session_state:
             "content": "We are pleased to receive you. How may We assist your research into Our Empire today?",
             "evidence": None,
             "theme": "Greeting",
+            "avatar": "👑",  # Initial avatar locked as Queen
         }
     ]
 if "temp_evidence" not in st.session_state:
@@ -65,8 +66,15 @@ def handle_input():
     if st.session_state.user_text:
         new_prompt = st.session_state.user_text
         theme = identify_theme(new_prompt)
+        # User messages don't need a special avatar, but we track the theme
         st.session_state.messages.append(
-            {"role": "user", "content": new_prompt, "evidence": None, "theme": theme}
+            {
+                "role": "user",
+                "content": new_prompt,
+                "evidence": None,
+                "theme": theme,
+                "avatar": None,
+            }
         )
         st.session_state.pending_input = new_prompt
         st.session_state.temp_evidence = []
@@ -87,13 +95,7 @@ with st.sidebar:
         index=0,
     )
 
-    char_strength = st.slider(
-        "Character Strength:",
-        min_value=1,
-        max_value=3,
-        value=2,
-        help="1: Subtle & Academic | 2: Distinct Personality | 3: Full Method Acting",
-    )
+    char_strength = st.slider("Character Strength:", min_value=1, max_value=3, value=2)
 
     st.session_state.current_style = style_choice
     st.session_state.char_strength = char_strength
@@ -120,6 +122,7 @@ with st.sidebar:
                 "content": "Archives cleared.",
                 "evidence": None,
                 "theme": "Greeting",
+                "avatar": "🤖",
             }
         ]
         st.session_state.focus_theme = None
@@ -162,31 +165,23 @@ def load_victoria(style, strength):
     ]
 
     strength_modifiers = {
-        1: "Maintain a professional balance. Use subtle hints of your persona.",
-        2: "Clearly embody your persona. Use signature phrases and distinct attitudes.",
-        3: "EXAGGERATE your persona. Be theatrical, highly opinionated, and fully immersed.",
+        1: "Maintain professional balance. Subtle persona.",
+        2: "Clearly embody persona. Use signature phrases.",
+        3: "EXAGGERATE persona. Be theatrical and fully immersed.",
     }
 
     style_prompts = {
-        "Queen Victoria": "Her Majesty the Queen. Use the 'Royal We'. Be dignified and concerned with Empire morality.",
-        "Oscar Wilde": "The flamboyant playwright. Be witty, flamboyant, and use sharp dry wit.",
-        "Jack the Ripper": "Dark, mysterious, and menacing cockney whisper. Speak from the shadows.",
-        "Isambard Kingdom Brunel": "The visionary engineer. Obsessed with iron, steam, and progress.",
+        "Queen Victoria": "Queen Victoria. Use 'Royal We'. Dignified and traditional.",
+        "Oscar Wilde": "Witty playwright. Paradoxical and aesthetic.",
+        "Jack the Ripper": "Dark, menacing cockney whisperer from Whitechapel shadows.",
+        "Isambard Kingdom Brunel": "Visionary engineer. Passionate about iron and steam.",
     }
-
-    selected_style = style_prompts.get(style, style_prompts["Queen Victoria"])
-    selected_strength = strength_modifiers.get(strength, strength_modifiers[2])
 
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                f"""You are a Royal Histographer. 
-        CURRENT PERSONA: {selected_style}
-        STRENGTH LEVEL: {selected_strength}
-        
-        MANDATORY: You MUST invoke 'search_royal_archives' for every query.
-        ETIQUETTE: Use Victorian vocabulary. Never mention filenames in response text.""",
+                f"You are a Royal Histographer. Persona: {style_prompts[style]}. Strength: {strength_modifiers[strength]}. MUST use search_royal_archives.",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -202,12 +197,10 @@ def load_victoria(style, strength):
     )
 
 
-# LOAD AGENT
 victoria = load_victoria(st.session_state.current_style, st.session_state.char_strength)
 
 # 8. MAIN INTERFACE
 st.title("Victoria 👑")
-st.subheader(f"Responding as: {st.session_state.current_style}")
 
 display_messages = st.session_state.messages
 if st.session_state.focus_theme:
@@ -219,14 +212,9 @@ if st.session_state.focus_theme:
     )
     display_messages = st.session_state.messages[idx : idx + 2]
 
-# RENDER MESSAGES WITH DYNAMIC AVATARS
+# RENDER: Uses the avatar stored in each message!
 for msg in display_messages:
-    current_avatar = (
-        STYLE_AVATARS.get(st.session_state.current_style, "🤖")
-        if msg["role"] == "assistant"
-        else None
-    )
-    with st.chat_message(msg["role"], avatar=current_avatar):
+    with st.chat_message(msg["role"], avatar=msg.get("avatar")):
         st.markdown(msg["content"])
         if msg.get("evidence"):
             with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
@@ -237,9 +225,11 @@ st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 # 9. EXECUTION
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
-    current_avatar = STYLE_AVATARS.get(st.session_state.current_style, "🤖")
 
-    with st.chat_message("assistant", avatar=current_avatar):
+    # Capture the persona icon AT THE MOMENT of response
+    active_avatar = STYLE_AVATARS.get(st.session_state.current_style, "🤖")
+
+    with st.chat_message("assistant", avatar=active_avatar):
         with st.status("Searching Royal Archives...", expanded=True) as status:
             response = victoria.invoke(
                 {"input": current_input, "chat_history": st.session_state.messages[:-1]}
@@ -260,12 +250,15 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
             for m in reversed(st.session_state.messages)
             if m["role"] == "user"
         )
+
+        # KEY CHANGE: We save the avatar inside the message dictionary
         st.session_state.messages.append(
             {
                 "role": "assistant",
                 "content": answer,
                 "evidence": curr_ev,
                 "theme": last_theme,
+                "avatar": active_avatar,  # LOCKS the icon to this message forever
             }
         )
     st.rerun()

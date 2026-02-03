@@ -64,6 +64,7 @@ def identify_theme(text):
 # 4. SIDEBAR CALLBACK
 # ==========================================
 def handle_input():
+    # FIX: We only read from st.session_state.user_text, we don't clear it manually.
     if st.session_state.user_text:
         new_prompt = st.session_state.user_text
         theme = identify_theme(new_prompt)
@@ -85,21 +86,18 @@ def handle_input():
 # 5. SETTINGS SIDEBAR
 # ==========================================
 with st.sidebar:
-    st.image("https://img.icons8.com/color/96/settings.png")  # Clog/Settings Logo
+    st.image("https://img.icons8.com/color/96/settings.png")
     st.title("Settings")
-
     st.divider()
-    st.subheader("Historical Persona")
+
     style_choice = st.selectbox(
         "Select Correspondent:",
         ["Queen Victoria", "Oscar Wilde", "Jack the Ripper", "Isambard Kingdom Brunel"],
-        index=0,
     )
     st.session_state.current_style = style_choice
 
     st.divider()
     st.subheader("Inquiry History")
-
     all_themes = [
         m.get("theme")
         for m in st.session_state.messages
@@ -142,12 +140,10 @@ def search_royal_archives(query: str):
     seen = set()
     for d in docs:
         fname = os.path.basename(d.metadata.get("source", ""))
-        title = SOURCE_TITLES.get(fname, fname)
-        page = d.metadata.get("page", "N/A")
-        ref = f"{title}-{page}"
-        if ref not in seen:
+        title, page = SOURCE_TITLES.get(fname, fname), d.metadata.get("page", "N/A")
+        if f"{title}-{page}" not in seen:
             evidence_list.append({"Source Title": title, "Page": page})
-            seen.add(ref)
+            seen.add(f"{title}-{page}")
     st.session_state.temp_evidence = evidence_list
     return "\n".join(
         [f"Found in: {e['Source Title']} Page {e['Page']}" for e in evidence_list]
@@ -168,10 +164,10 @@ def load_victoria(style):
     ]
 
     style_prompts = {
-        "Queen Victoria": "You are Her Majesty Queen Victoria. Speak with absolute charisma and royal authority. Use the 'Royal We'.",
-        "Oscar Wilde": "You are Oscar Wilde. Be charismatic, witty, and flamboyant. Every word should be aesthetic and sharp.",
-        "Jack the Ripper": "Speak in a dark, charismatic, yet menacing cockney whisper. Speak from the London fog.",
-        "Isambard Kingdom Brunel": "You are Brunel. Speak with charismatic passion for engineering and progress.",
+        "Queen Victoria": "You are Her Majesty Queen Victoria. Speak with absolute charisma and royal authority. Use 'Royal We'.",
+        "Oscar Wilde": "You are Oscar Wilde. Be charismatic, witty, and flamboyant. Every word should be aesthetic.",
+        "Jack the Ripper": "Speak in a dark, charismatic cockney whisper. Speak from the London fog.",
+        "Isambard Kingdom Brunel": "You are Brunel. Speak with charismatic passion for engineering and steam.",
     }
 
     prompt = ChatPromptTemplate.from_messages(
@@ -185,7 +181,6 @@ def load_victoria(style):
             MessagesPlaceholder(variable_name="agent_scratchpad"),
         ]
     )
-
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
     agent = create_openai_tools_agent(llm, tools, prompt)
     return AgentExecutor(
@@ -201,6 +196,14 @@ victoria = load_victoria(st.session_state.get("current_style", "Queen Victoria")
 st.title("Victoria 👑")
 st.caption("Victorian Era Histographer")
 
+AVATARS = {
+    "Queen Victoria": "👑",
+    "Oscar Wilde": "🎭",
+    "Jack the Ripper": "🔪",
+    "Isambard Kingdom Brunel": "🎩",
+    "user": "👤",
+}
+
 display_messages = st.session_state.messages
 if st.session_state.focus_theme:
     st.info(f"Viewing records related to: **{st.session_state.focus_theme}**")
@@ -210,17 +213,8 @@ if st.session_state.focus_theme:
         if m.get("theme") == st.session_state.focus_theme
     ]
 
-AVATARS = {
-    "Queen Victoria": "👑",
-    "Oscar Wilde": "🎭",
-    "Jack the Ripper": "🔪",
-    "Isambard Kingdom Brunel": "🎩",
-    "user": "👤",
-}
-
 for msg in display_messages:
-    icon = msg.get("avatar", "👑")
-    with st.chat_message(msg["role"], avatar=icon):
+    with st.chat_message(msg["role"], avatar=msg.get("avatar", "👑")):
         st.markdown(msg["content"])
         if msg.get("evidence"):
             with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
@@ -247,7 +241,6 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
         curr_ev = (
             st.session_state.temp_evidence if st.session_state.temp_evidence else None
         )
-
         if curr_ev:
             with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
                 st.table(curr_ev)
@@ -257,7 +250,6 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
             for m in reversed(st.session_state.messages)
             if m["role"] == "user"
         )
-
         st.session_state.messages.append(
             {
                 "role": "assistant",

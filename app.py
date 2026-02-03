@@ -101,7 +101,7 @@ def search_royal_archives(query: str):
 
 
 # ==========================================
-# 4. AGENT LOGIC (ENFORCED PERSONA & ERA LOCK)
+# 4. AGENT LOGIC
 # ==========================================
 @st.cache_resource
 def load_victoria(style, strength):
@@ -158,11 +158,11 @@ def load_victoria(style, strength):
 
 
 # ==========================================
-# 5. SIDEBAR (PREVIOUS LOGIC RESTORED)
+# 5. SIDEBAR (RENAMED TO SETTINGS)
 # ==========================================
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
-    st.title("Correspondence Archives")
+    st.title("Settings")  # Renamed from Correspondence Archives
 
     st.divider()
     st.subheader("Historical Persona")
@@ -174,7 +174,6 @@ with st.sidebar:
     st.divider()
     st.subheader("Inquiry History")
 
-    # RESTORED PREVIOUS HISTORY LOGIC
     all_themes = [
         m.get("theme")
         for m in st.session_state.messages
@@ -209,9 +208,13 @@ if st.session_state.focus_theme:
     )
     display_messages = st.session_state.messages[idx : idx + 2]
 
+# RENDER LOOP FIX: Explicitly check for USER role to show hat
 for msg in display_messages:
-    # Use 🎩 for all user messages, and character avatars for assistant
-    av = USER_AVATAR if msg["role"] == "user" else msg.get("avatar")
+    if msg["role"] == "user":
+        av = USER_AVATAR
+    else:
+        av = msg.get("avatar")
+
     with st.chat_message(msg["role"], avatar=av):
         st.markdown(msg["content"])
         if msg.get("evidence"):
@@ -261,6 +264,8 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
         curr_ev = (
             st.session_state.temp_evidence if st.session_state.temp_evidence else None
         )
+
+        # Save response with current active avatar
         st.session_state.messages.append(
             {
                 "role": "assistant",

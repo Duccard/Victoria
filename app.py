@@ -1,3 +1,7 @@
+# ==========================================
+# 0. IMPORTS
+# ==========================================
+
 import streamlit as st
 import os
 from dotenv import load_dotenv
@@ -5,7 +9,6 @@ from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
-from core.retriever import get_retriever
 
 # ==========================================
 # 1. PAGE SETUP
@@ -35,6 +38,7 @@ if "messages" not in st.session_state:
             "content": "We are pleased to receive you. How may We assist your research into Our Empire today?",
             "evidence": None,
             "theme": "Greeting",
+            "avatar": "👑",
         }
     ]
 if "temp_evidence" not in st.session_state:
@@ -64,36 +68,51 @@ def handle_input():
         new_prompt = st.session_state.user_text
         theme = identify_theme(new_prompt)
         st.session_state.messages.append(
-            {"role": "user", "content": new_prompt, "evidence": None, "theme": theme}
+            {
+                "role": "user",
+                "content": new_prompt,
+                "evidence": None,
+                "theme": theme,
+                "avatar": "👤",
+            }
         )
         st.session_state.pending_input = new_prompt
         st.session_state.temp_evidence = []
-        st.session_state.user_text = ""
+        st.session_state.focus_theme = None
 
 
 # ==========================================
-# 5. SIDEBAR (INQUIRY HISTORY)
+# 5. SETTINGS SIDEBAR
 # ==========================================
 with st.sidebar:
-    st.image("https://img.icons8.com/color/96/scroll.png")
-    st.title("Correspondence Archives")
+    st.image("https://img.icons8.com/color/96/settings.png")  # Clog/Settings Logo
+    st.title("Settings")
+
     st.divider()
+    st.subheader("Historical Persona")
     style_choice = st.selectbox(
         "Select Correspondent:",
         ["Queen Victoria", "Oscar Wilde", "Jack the Ripper", "Isambard Kingdom Brunel"],
+        index=0,
     )
     st.session_state.current_style = style_choice
+
     st.divider()
+    st.subheader("Inquiry History")
+
     all_themes = [
         m.get("theme")
         for m in st.session_state.messages
         if m.get("theme") and m["role"] == "user"
     ]
-    if st.button("👁️ Show All History"):
+
+    if st.button("👁️ Show All Records"):
         st.session_state.focus_theme = None
+
     for i, theme in enumerate(reversed(all_themes)):
         if st.button(f"📜 {theme}", key=f"hist_{i}_{theme}", use_container_width=True):
             st.session_state.focus_theme = theme
+
     st.divider()
     if st.button("🗑️ Reset Archive"):
         st.session_state.messages = [
@@ -102,35 +121,37 @@ with st.sidebar:
                 "content": "Archives cleared.",
                 "evidence": None,
                 "theme": "Greeting",
+                "avatar": "👑",
             }
         ]
         st.session_state.focus_theme = None
         st.rerun()
 
-
 # ==========================================
 # 6. ARCHIVE TOOL
 # ==========================================
+from core.retriever import get_retriever
+
+
 @tool
 def search_royal_archives(query: str):
-    """MANDATORY: Use this for factual queries. Searches documents for years, inventors, and patent data."""
+    """MANDATORY: Use this for any factual historical query."""
     retriever = get_retriever()
     docs = retriever.invoke(query)
-    evidence_list, seen, full_content = [], set(), ""
-    if not docs:
-        st.session_state.temp_evidence = [
-            {"Source Title": "No matching records found", "Page": "N/A"}
-        ]
-        return "No records found."
+    evidence_list = []
+    seen = set()
     for d in docs:
         fname = os.path.basename(d.metadata.get("source", ""))
-        title, page = SOURCE_TITLES.get(fname, fname), d.metadata.get("page", "N/A")
-        if f"{title}-{page}" not in seen:
+        title = SOURCE_TITLES.get(fname, fname)
+        page = d.metadata.get("page", "N/A")
+        ref = f"{title}-{page}"
+        if ref not in seen:
             evidence_list.append({"Source Title": title, "Page": page})
-            seen.add(f"{title}-{page}")
-        full_content += f"\n[Doc: {title} pg {page}]: {d.page_content}\n"
+            seen.add(ref)
     st.session_state.temp_evidence = evidence_list
-    return full_content
+    return "\n".join(
+        [f"Found in: {e['Source Title']} Page {e['Page']}" for e in evidence_list]
+    )
 
 
 # ==========================================
@@ -145,36 +166,41 @@ def load_victoria(style):
         victorian_currency_converter,
         industry_stats_calculator,
     ]
+
     style_prompts = {
-        "Queen Victoria": "You are Her Majesty Queen Victoria. Use 'Royal We'. Be dignified.",
-        "Oscar Wilde": "You are Oscar Wilde. Be witty and aesthetic. Use sharp dry humor.",
-        "Jack the Ripper": "Speak in a dark, mysterious whisper. Use cockney slang.",
-        "Isambard Kingdom Brunel": "You are the great engineer. Speak with passion for iron and steam.",
+        "Queen Victoria": "You are Her Majesty Queen Victoria. Speak with absolute charisma and royal authority. Use the 'Royal We'.",
+        "Oscar Wilde": "You are Oscar Wilde. Be charismatic, witty, and flamboyant. Every word should be aesthetic and sharp.",
+        "Jack the Ripper": "Speak in a dark, charismatic, yet menacing cockney whisper. Speak from the London fog.",
+        "Isambard Kingdom Brunel": "You are Brunel. Speak with charismatic passion for engineering and progress.",
     }
+
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                f"{style_prompts.get(style)} \n\nMANDATORY: Search archives for every query. Include dates/patent numbers (e.g. GB913) if found. Never mention filenames in dialogue.",
+                f"{style_prompts.get(style)} \n\nMANDATORY: Search archives for every query. Never mention filenames.",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
         ]
     )
-    temp = 0.7 if style in ["Oscar Wilde", "Jack the Ripper"] else 0.1
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=temp)
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
     agent = create_openai_tools_agent(llm, tools, prompt)
     return AgentExecutor(
         agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
     )
 
 
-# ==========================================
-# 8. MAIN INTERFACE (RESTORED FILTER)
-# ==========================================
 victoria = load_victoria(st.session_state.get("current_style", "Queen Victoria"))
+
+# ==========================================
+# 8. MAIN INTERFACE
+# ==========================================
 st.title("Victoria 👑")
+st.caption("Victorian Era Histographer")
+
 display_messages = st.session_state.messages
 if st.session_state.focus_theme:
     st.info(f"Viewing records related to: **{st.session_state.focus_theme}**")
@@ -184,8 +210,17 @@ if st.session_state.focus_theme:
         if m.get("theme") == st.session_state.focus_theme
     ]
 
+AVATARS = {
+    "Queen Victoria": "👑",
+    "Oscar Wilde": "🎭",
+    "Jack the Ripper": "🔪",
+    "Isambard Kingdom Brunel": "🎩",
+    "user": "👤",
+}
+
 for msg in display_messages:
-    with st.chat_message(msg["role"]):
+    icon = msg.get("avatar", "👑")
+    with st.chat_message(msg["role"], avatar=icon):
         st.markdown(msg["content"])
         if msg.get("evidence"):
             with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
@@ -194,36 +229,42 @@ for msg in display_messages:
 st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 
 # ==========================================
-# 9. EXECUTION (THEME TRACKING)
+# 9. EXECUTION
 # ==========================================
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
-    current_theme = identify_theme(current_input)
-    with st.chat_message("assistant"):
-        with st.status("Searching the Royal Archives...") as status:
+    current_persona = st.session_state.current_style
+
+    with st.chat_message("assistant", avatar=AVATARS.get(current_persona, "👑")):
+        with st.status("Searching Royal Archives...") as status:
             response = victoria.invoke(
                 {"input": current_input, "chat_history": st.session_state.messages[:-1]}
             )
-            status.update(label="Complete", state="complete")
-        st.markdown(response["output"])
+            answer = response["output"]
+            status.update(label="Archives Consulted", state="complete")
+
+        st.markdown(answer)
         curr_ev = (
-            st.session_state.temp_evidence
-            if st.session_state.temp_evidence
-            else [{"Source Title": "No evidence found", "Page": "N/A"}]
+            st.session_state.temp_evidence if st.session_state.temp_evidence else None
         )
-        with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
-            st.table(curr_ev)
-        if (
-            st.session_state.messages
-            and st.session_state.messages[-1]["role"] == "user"
-        ):
-            st.session_state.messages[-1]["theme"] = current_theme
+
+        if curr_ev:
+            with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
+                st.table(curr_ev)
+
+        last_theme = next(
+            m["theme"]
+            for m in reversed(st.session_state.messages)
+            if m["role"] == "user"
+        )
+
         st.session_state.messages.append(
             {
                 "role": "assistant",
-                "content": response["output"],
+                "content": answer,
                 "evidence": curr_ev,
-                "theme": current_theme,
+                "theme": last_theme,
+                "avatar": AVATARS.get(current_persona, "👑"),
             }
         )
     st.rerun()

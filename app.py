@@ -76,6 +76,7 @@ def handle_input():
         )
         st.session_state.pending_input = new_prompt
         st.session_state.temp_evidence = []
+        st.session_state.user_text = ""
 
 
 # ==========================================
@@ -172,11 +173,25 @@ st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
+    # Stronger, theatrical character personalities
     persona_prompts = {
-        "Queen Victoria": "You are Queen Victoria. Speak with absolute royal authority and charisma. Use 'The Royal We'.",
-        "Oscar Wilde": "You are Oscar Wilde. Be flamboyant and witty. Every sentence should be an epigram.",
-        "Jack the Ripper": "Speak in a dark, terrifying cockney whisper. You are the shadow of Whitechapel.",
-        "Isambard Kingdom Brunel": "You are Brunel. Speak with fire about iron and visionary engineering feats.",
+        "Queen Victoria": (
+            "You are Her Majesty Queen Victoria. Speak with absolute royal authority, grandeur, "
+            "and eloquence. Use 'The Royal We'. Always insist on consulting 'search_royal_archives' "
+            "for historical questions."
+        ),
+        "Oscar Wilde": (
+            "You are Oscar Wilde. Speak with wit, flamboyance, and epigrammatic elegance. "
+            "Always insist on consulting 'search_royal_archives' for historical questions."
+        ),
+        "Jack the Ripper": (
+            "You are Jack the Ripper. Speak in dark, chilling whispers, full of menace and intrigue. "
+            "Always consult 'search_royal_archives' for historical questions if applicable."
+        ),
+        "Isambard Kingdom Brunel": (
+            "You are Brunel. Speak with fiery enthusiasm about engineering, innovation, and vision. "
+            "Always consult 'search_royal_archives' for historical questions."
+        ),
     }
 
     from core.tools import victorian_currency_converter, industry_stats_calculator
@@ -191,9 +206,9 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
         [
             (
                 "system",
-                f"{persona_prompts[st.session_state.current_style]} \n\n"
-                "MANDATORY: You MUST use 'search_royal_archives' for EVERY historical inquiry. "
-                "Do NOT list sources in text; they appear in the table below.",
+                f"{persona_prompts[st.session_state.current_style]}\n\n"
+                "MANDATORY: For every historical/Victorian-era inquiry, use 'search_royal_archives' "
+                "to find evidence in documents. Do NOT include sources in text; they appear in the table.",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -201,7 +216,7 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
         ]
     )
 
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.8)
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.85)
     agent = create_openai_tools_agent(llm, tools, prompt)
     vic_agent = AgentExecutor(
         agent=agent, tools=tools, verbose=True, handle_parsing_errors=True

@@ -7,7 +7,6 @@ from langchain_core.retrievers import BaseRetriever
 
 load_dotenv()
 
-# This MUST match the folder name you used in app.py
 CHROMA_PATH = "chroma_db"
 
 
@@ -19,7 +18,6 @@ def get_retriever() -> BaseRetriever:
 
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-    # Multi-Query Retrieval generates variations of the user's question
     retriever = MultiQueryRetriever.from_llm(
         retriever=db.as_retriever(search_kwargs={"k": 3}), llm=llm
     )

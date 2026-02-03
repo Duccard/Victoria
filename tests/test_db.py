@@ -7,7 +7,6 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
-# Configuration Constants
 DATA_PATH: str = "data"
 CHROMA_PATH: str = "chroma_db"
 
@@ -63,7 +62,6 @@ def ingest_docs() -> None:
         f"--- 3. Embedding and Saving to {CHROMA_PATH} (Creating {len(chunks)} chunks) ---"
     )
 
-    # Initialize the database and save the chunks
     db = Chroma.from_documents(
         documents=chunks, embedding=OpenAIEmbeddings(), persist_directory=CHROMA_PATH
     )

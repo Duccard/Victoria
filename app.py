@@ -187,7 +187,6 @@ with st.sidebar:
 st.title("Victoria 👑")
 st.caption("### Victorian Era Histographer")
 
-# Filter messages if a theme is selected
 display_messages = st.session_state.messages
 if st.session_state.focus_theme:
     st.info(f"Viewing records related to: **{st.session_state.focus_theme}**")
@@ -198,7 +197,6 @@ if st.session_state.focus_theme:
     )
     display_messages = st.session_state.messages[idx : idx + 2]
 
-# Render Chat
 for msg in display_messages:
     with st.chat_message(msg["role"], avatar=msg.get("avatar")):
         st.markdown(msg["content"])

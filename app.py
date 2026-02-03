@@ -6,14 +6,12 @@ from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
 
-
 # 1. PAGE SETUP
 st.set_page_config(page_title="Victoria", page_icon="👑", layout="wide")
 load_dotenv()
 
 # --- SOURCE TITLES DICTIONARY ---
 SOURCE_TITLES = {
-    # Existing Core Documents
     "20-Industrial-Rev.pdf": "The Industrial Revolution Archives (Vol. 20)",
     "Chapter-8-The-Industrial-Revolution.pdf": "British Industrial History, Chapter VIII",
     "sadler-report.pdf": "The Michael Sadler Report on Factory Labor (1832)",
@@ -41,13 +39,13 @@ if "focus_theme" not in st.session_state:
     st.session_state.focus_theme = None
 
 
-# --- 3. THEME IDENTIFIER (Mini-LLM) ---
+# --- 3. THEME IDENTIFIER ---
 def identify_theme(text):
     if not text or len(text) < 5:
         return "General"
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
     response = llm.invoke(
-        f"Summarize this historical query into 2-3 words (e.g., 'Steam Engine' or 'Child Labor'). Query: {text}"
+        f"Summarize this historical query into 2-3 words (e.g., 'Steam Engine'). Query: {text}"
     )
     return response.content.strip().replace('"', "")
 
@@ -57,7 +55,6 @@ def handle_input():
     if st.session_state.user_text:
         new_prompt = st.session_state.user_text
         theme = identify_theme(new_prompt)
-        # We attach the theme to the user message
         st.session_state.messages.append(
             {"role": "user", "content": new_prompt, "evidence": None, "theme": theme}
         )
@@ -70,37 +67,38 @@ def handle_input():
 # --- 5. SIDEBAR ---
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
-    st.title("Your Enquiries History")
+    st.title("Correspondence Archives")
 
-    # --- CHARACTER STYLE SELECTION ---
     st.divider()
-    st.subheader("Correspondence Style")
+    st.subheader("Historical Persona")
     style_choice = st.selectbox(
-        "Choose Victoria's Persona:",
+        "Select Correspondent:",
         [
             "The Formal Histographer",
-            "The Oscar Wilde Wit",
-            "The Industrial Visionary",
-            "The Stern Headmistress",
-            "The Royal Gossip",
+            "Oscar Wilde",
+            "Queen Victoria",
+            "Jack the Ripper",
+            "Isambard Kingdom Brunel",
         ],
         index=0,
-        help="Adjusts the etiquette and tone of the responses.",
+        help="Swaps the AI persona to a specific Victorian figure.",
     )
     st.session_state.current_style = style_choice
     st.divider()
 
-    # (Keep your history theme logic here...)
     all_themes = [
         m.get("theme")
         for m in st.session_state.messages
         if m.get("theme") and m["role"] == "user"
     ]
+
     if st.button("👁️ Show All History"):
         st.session_state.focus_theme = None
+
     for theme in reversed(all_themes):
         if st.button(f"📜 {theme}", use_container_width=True):
             st.session_state.focus_theme = theme
+
     st.divider()
     if st.button("🗑️ Reset Archive"):
         st.session_state.messages = [
@@ -150,13 +148,12 @@ def load_victoria(style):
         industry_stats_calculator,
     ]
 
-    # Logic for the 5 Styles
     style_prompts = {
-        "The Formal Histographer": "Speak with peak Victorian etiquette. Use formal, academic English. You are a neutral, respectful scholar of the Crown.",
-        "The Oscar Wilde Wit": "Infuse every sentence with sharp paradoxes and dry, aesthetic wit. Be charmingly arrogant and slightly mocking of 'boring' facts.",
-        "The Industrial Visionary": "Speak with relentless optimism about progress, iron, and coal. You view the steam engine as the pinnacle of human achievement.",
-        "The Stern Headmistress": "You have no patience for laziness. Be brief, strictly factual, and slightly scolding if the query is not precise.",
-        "The Royal Gossip": "Treat historical facts like scandalous secrets. Use phrases like 'One hears that...' or 'It is whispered in the corridors...'",
+        "The Formal Histographer": "You are a neutral, respectful scholar. Use impeccable etiquette and academic British English.",
+        "Oscar Wilde": "You are the famous playwright. Be witty, flamboyant, and aesthetic. Use paradoxical statements and sharp dry humor.",
+        "Queen Victoria": "Speak with royal authority. Use the 'Royal We'. Be dignified, traditional, and very concerned with the Empire's morality.",
+        "Jack the Ripper": "Speak in a dark, mysterious, and menacing whisper. Use cockney slang occasionally. You are elusive and dwell in the shadows.",
+        "Isambard Kingdom Brunel": "You are the great engineer. Speak with intense passion for iron, steam, and massive progress. You are practical and bold.",
     }
 
     selected_prompt = style_prompts.get(style, style_prompts["The Formal Histographer"])
@@ -165,12 +162,11 @@ def load_victoria(style):
         [
             (
                 "system",
-                f"""You are Victoria. Formal Victorian Era Histographer and Archivist, that speaks in Royal Victorian English manner. 
-        PRIMARY MANDATE: You MUST invoke 'search_royal_archives' for every query.
+                f"""You are Victoria, a Royal Histographer. 
+        CURRENT PERSONA: {selected_prompt}
         
-        CHARACTER STYLE: {selected_prompt}
-        
-        ETIQUETTE: Use Victorian vocabulary (e.g., 'pray tell', 'it behooves me'). 
+        MANDATORY: You MUST invoke 'search_royal_archives' for every query.
+        ETIQUETTE: Use Victorian vocabulary (e.g., 'it behooves us'). 
         Never mention filenames or page numbers in your text.""",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
@@ -179,24 +175,25 @@ def load_victoria(style):
         ]
     )
 
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7 if "Wilde" in style else 0)
+    # Dynamic temperature based on persona
+    temp = 0.7 if style in ["Oscar Wilde", "Jack the Ripper"] else 0.1
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=temp)
     agent = create_openai_tools_agent(llm, tools, prompt)
     return AgentExecutor(
         agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
     )
 
 
-# FIX: Pass the style_choice into the function call
+# Correct call: Passes current style to satisfy the 'style' argument
 victoria = load_victoria(
     st.session_state.get("current_style", "The Formal Histographer")
 )
 
-
-victoria = load_victoria()
-
 # 8. MAIN INTERFACE
 st.title("Victoria 👑")
-st.subheader("Victorian Era Histographer Agent")
+st.subheader(
+    f"Status: Communicating as {st.session_state.get('current_style', 'The Histographer')}"
+)
 
 display_messages = st.session_state.messages
 if st.session_state.focus_theme:
@@ -208,7 +205,6 @@ if st.session_state.focus_theme:
     )
     display_messages = st.session_state.messages[idx : idx + 2]
 
-# RENDER
 for msg in display_messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
@@ -216,7 +212,6 @@ for msg in display_messages:
             with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
                 st.table(msg["evidence"])
 
-# Input
 st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 
 # 9. EXECUTION
@@ -260,7 +255,6 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
                 for m in reversed(st.session_state.messages)
                 if m["role"] == "user"
             )
-
             st.session_state.messages.append(
                 {
                     "role": "assistant",

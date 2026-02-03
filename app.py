@@ -12,11 +12,16 @@ load_dotenv()
 
 # --- SOURCE TITLES DICTIONARY ---
 SOURCE_TITLES = {
+    # Existing Core Documents
     "20-Industrial-Rev.pdf": "The Industrial Revolution Archives (Vol. 20)",
     "Chapter-8-The-Industrial-Revolution.pdf": "British Industrial History, Chapter VIII",
     "sadler-report.pdf": "The Michael Sadler Report on Factory Labor (1832)",
     "mines-act-1842.pdf": "Royal Commission on Children's Employment in Mines",
     "2020_Kelly_Mokyr_Mechanics_Ind_Rev.pdf": "Mechanics of the Industrial Revolution (Kelly & Mokyr)",
+    "1851-Great-Exhibition-Malta.pdf": "Official Catalog: Works of Industry of All Nations (1851)",
+    "Getty-practical-treatise-on-weaving.pdf": "A Practical Treatise on Weaving and Designing (Ashenhurst, 1885)",
+    "MPRA_paper_96644.pdf": "The First Industrial Revolution: Creation of a New Global Era",
+    "WHP-6526-Read--Innovations-and-Inventions.pdf": "Innovations and Innovators of the Industrial Revolution (OER Project)",
 }
 
 # 2. STATE INITIALIZATION

@@ -39,7 +39,7 @@ if "messages" not in st.session_state:
             "content": "We are pleased to receive you. How may We assist your research into Our Empire today?",
             "evidence": None,
             "theme": "Greeting",
-            "avatar": "👑",  # Initial avatar locked as Queen
+            "avatar": "👑",  # Initial avatar is locked as Queen Victoria
         }
     ]
 if "temp_evidence" not in st.session_state:
@@ -56,7 +56,7 @@ def identify_theme(text):
         return "General"
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
     response = llm.invoke(
-        f"Summarize this historical query into 2-3 words (e.g., 'Steam Engine'). Query: {text}"
+        f"Summarize this historical query into 2-3 words. Query: {text}"
     )
     return response.content.strip().replace('"', "")
 
@@ -66,7 +66,7 @@ def handle_input():
     if st.session_state.user_text:
         new_prompt = st.session_state.user_text
         theme = identify_theme(new_prompt)
-        # User messages don't need a special avatar, but we track the theme
+        # Store user messages without a specific persona avatar
         st.session_state.messages.append(
             {
                 "role": "user",
@@ -101,6 +101,7 @@ with st.sidebar:
     st.session_state.char_strength = char_strength
     st.divider()
 
+    # History theme logic
     all_themes = [
         m.get("theme")
         for m in st.session_state.messages
@@ -165,23 +166,23 @@ def load_victoria(style, strength):
     ]
 
     strength_modifiers = {
-        1: "Maintain professional balance. Subtle persona.",
-        2: "Clearly embody persona. Use signature phrases.",
-        3: "EXAGGERATE persona. Be theatrical and fully immersed.",
+        1: "Professional and subtle.",
+        2: "Distinct personality and phrases.",
+        3: "Extreme method acting and theatricality.",
     }
 
     style_prompts = {
-        "Queen Victoria": "Queen Victoria. Use 'Royal We'. Dignified and traditional.",
-        "Oscar Wilde": "Witty playwright. Paradoxical and aesthetic.",
-        "Jack the Ripper": "Dark, menacing cockney whisperer from Whitechapel shadows.",
-        "Isambard Kingdom Brunel": "Visionary engineer. Passionate about iron and steam.",
+        "Queen Victoria": "Queen Victoria. Royal We. Sovereign and moral.",
+        "Oscar Wilde": "Oscar Wilde. Aesthetic, witty, and paradoxical.",
+        "Jack the Ripper": "Jack the Ripper. Menacing cockney shadows.",
+        "Isambard Kingdom Brunel": "Brunel. Passionate engineering and progress.",
     }
 
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                f"You are a Royal Histographer. Persona: {style_prompts[style]}. Strength: {strength_modifiers[strength]}. MUST use search_royal_archives.",
+                f"You are Victoria. Persona: {style_prompts[style]}. Strength: {strength_modifiers[strength]}. MUST use search_royal_archives.",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -201,6 +202,8 @@ victoria = load_victoria(st.session_state.current_style, st.session_state.char_s
 
 # 8. MAIN INTERFACE
 st.title("Victoria 👑")
+# ADDED SUBTITLE
+st.caption("### Victorian Era Histographer")
 
 display_messages = st.session_state.messages
 if st.session_state.focus_theme:
@@ -212,7 +215,7 @@ if st.session_state.focus_theme:
     )
     display_messages = st.session_state.messages[idx : idx + 2]
 
-# RENDER: Uses the avatar stored in each message!
+# RENDER: Uses the locked-in avatar for each message
 for msg in display_messages:
     with st.chat_message(msg["role"], avatar=msg.get("avatar")):
         st.markdown(msg["content"])
@@ -226,7 +229,7 @@ st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
-    # Capture the persona icon AT THE MOMENT of response
+    # Capture active avatar before generating response
     active_avatar = STYLE_AVATARS.get(st.session_state.current_style, "🤖")
 
     with st.chat_message("assistant", avatar=active_avatar):
@@ -251,14 +254,14 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
             if m["role"] == "user"
         )
 
-        # KEY CHANGE: We save the avatar inside the message dictionary
+        # Save the specific avatar used for this message
         st.session_state.messages.append(
             {
                 "role": "assistant",
                 "content": answer,
                 "evidence": curr_ev,
                 "theme": last_theme,
-                "avatar": active_avatar,  # LOCKS the icon to this message forever
+                "avatar": active_avatar,
             }
         )
     st.rerun()

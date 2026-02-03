@@ -1,7 +1,8 @@
-streamlit
-python-dotenv
-langchain==0.1.0
-langchain-openai
-langchain-community
-chromadb
-pypdf
+streamlit==1.35.0
+langchain==0.2.11
+langchain-community==0.2.10
+langchain-core==0.2.23
+langchain-openai==0.1.17
+python-dotenv==1.0.1
+chromadb==0.5.3
+pypdf==4.3.1

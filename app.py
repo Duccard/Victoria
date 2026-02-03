@@ -23,6 +23,14 @@ SOURCE_TITLES = {
     "WHP-6526-Read--Innovations-and-Inventions.pdf": "Innovations and Innovators of the Industrial Revolution (OER Project)",
 }
 
+# --- AVATAR MAPPING ---
+STYLE_AVATARS = {
+    "Queen Victoria": "👑",
+    "Oscar Wilde": "🎭",
+    "Jack the Ripper": "🔪",
+    "Isambard Kingdom Brunel": "⚙️",
+}
+
 # 2. STATE INITIALIZATION
 if "messages" not in st.session_state:
     st.session_state.messages = [
@@ -37,6 +45,8 @@ if "temp_evidence" not in st.session_state:
     st.session_state.temp_evidence = []
 if "focus_theme" not in st.session_state:
     st.session_state.focus_theme = None
+if "current_style" not in st.session_state:
+    st.session_state.current_style = "Queen Victoria"
 
 
 # --- 3. THEME IDENTIFIER ---
@@ -192,16 +202,12 @@ def load_victoria(style, strength):
     )
 
 
-victoria = load_victoria(
-    st.session_state.get("current_style", "Queen Victoria"),
-    st.session_state.get("char_strength", 2),
-)
+# LOAD AGENT
+victoria = load_victoria(st.session_state.current_style, st.session_state.char_strength)
 
 # 8. MAIN INTERFACE
 st.title("Victoria 👑")
-st.subheader(
-    f"Current Correspondent: {st.session_state.get('current_style', 'Queen Victoria')} (Strength {st.session_state.get('char_strength', 2)})"
-)
+st.subheader(f"Responding as: {st.session_state.current_style}")
 
 display_messages = st.session_state.messages
 if st.session_state.focus_theme:
@@ -213,8 +219,14 @@ if st.session_state.focus_theme:
     )
     display_messages = st.session_state.messages[idx : idx + 2]
 
+# RENDER MESSAGES WITH DYNAMIC AVATARS
 for msg in display_messages:
-    with st.chat_message(msg["role"]):
+    current_avatar = (
+        STYLE_AVATARS.get(st.session_state.current_style, "🤖")
+        if msg["role"] == "assistant"
+        else None
+    )
+    with st.chat_message(msg["role"], avatar=current_avatar):
         st.markdown(msg["content"])
         if msg.get("evidence"):
             with st.expander("📝 ARCHIVAL CITATIONS", expanded=True):
@@ -225,8 +237,9 @@ st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 # 9. EXECUTION
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
+    current_avatar = STYLE_AVATARS.get(st.session_state.current_style, "🤖")
 
-    with st.chat_message("assistant"):
+    with st.chat_message("assistant", avatar=current_avatar):
         with st.status("Searching Royal Archives...", expanded=True) as status:
             response = victoria.invoke(
                 {"input": current_input, "chat_history": st.session_state.messages[:-1]}

@@ -15,7 +15,6 @@ from langchain.tools import tool
 st.set_page_config(page_title="Victoria", page_icon="👑", layout="wide")
 load_dotenv()
 
-# Complete document list from your directory
 SOURCE_TITLES = {
     "20-Industrial-Rev.pdf": "The Industrial Revolution and its Impact on European Society",
     "1851_GreatExhibition_Cap...gue.pdf": "Official Descriptive and Illustrated Catalogue of the Great Exhibition (1851)",
@@ -43,10 +42,12 @@ if "messages" not in st.session_state:
     ]
 if "temp_evidence" not in st.session_state:
     st.session_state.temp_evidence = []
+if "focus_theme" not in st.session_state:
+    st.session_state.focus_theme = None
 
 
 # ==========================================
-# 3. UTILITIES & HANDLERS
+# 3. UTILITIES
 # ==========================================
 def identify_theme(text):
     if not text or len(text) < 2:
@@ -68,7 +69,7 @@ def handle_input():
                 "role": "user",
                 "content": new_prompt,
                 "theme": theme,
-                "avatar": "🎩",  # User remains Cylinder Hat
+                "avatar": "🎩",
                 "evidence": None,
             }
         )
@@ -106,23 +107,60 @@ def search_royal_archives(query: str):
 # 5. MAIN INTERFACE
 # ==========================================
 st.title("Victoria 👑")
-st.markdown("#### Victorian Era Histographer")  # Smaller but visible subtitle
+st.markdown("#### Victorian Era Histographer")  # Medium-Small Subtitle
 
 AVATARS = {
     "Queen Victoria": "👑",
     "Oscar Wilde": "🎭",
     "Jack the Ripper": "🔪",
-    "Isambard Kingdom Brunel": "⚙️",  # Changed to Cog
+    "Isambard Kingdom Brunel": "⚙️",  # Brunel is a Cog
     "user": "🎩",
 }
 
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/settings.png")
+    st.title("Settings")
+
     style_choice = st.selectbox("Select Correspondent:", list(AVATARS.keys())[:-1])
     st.session_state.current_style = style_choice
 
-# Display message history with Evidence Tables
-for msg in st.session_state.messages:
+    st.divider()
+    st.subheader("Inquiry History")
+    all_themes = [
+        m.get("theme")
+        for m in st.session_state.messages
+        if m.get("theme") and m["role"] == "user"
+    ]
+
+    if st.button("👁️ Show All Records", use_container_width=True):
+        st.session_state.focus_theme = None
+
+    for i, theme in enumerate(reversed(all_themes)):
+        if st.button(f"📜 {theme}", key=f"hist_{i}", use_container_width=True):
+            st.session_state.focus_theme = theme
+
+    st.divider()
+    if st.button("🗑️ Reset Archive", use_container_width=True):
+        st.session_state.messages = [
+            {
+                "role": "assistant",
+                "content": "Archives cleared.",
+                "avatar": "👑",
+                "theme": "Greeting",
+            }
+        ]
+        st.rerun()
+
+display_messages = st.session_state.messages
+if st.session_state.focus_theme:
+    st.info(f"Viewing records: **{st.session_state.focus_theme}**")
+    display_messages = [
+        m
+        for m in st.session_state.messages
+        if m.get("theme") == st.session_state.focus_theme or m["role"] == "assistant"
+    ]
+
+for msg in display_messages:
     with st.chat_message(msg["role"], avatar=msg.get("avatar")):
         st.markdown(msg["content"])
         if msg.get("evidence"):
@@ -131,11 +169,10 @@ for msg in st.session_state.messages:
 
 st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 
-# ================= : EXECUTION : =================
+# ================= 6. EXECUTION  =================
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
-    # Reload agent with correct style
     from core.tools import victorian_currency_converter, industry_stats_calculator
 
     tools = [
@@ -171,18 +208,26 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
 
         st.markdown(response["output"])
 
-        # Show Evidence Table
         evidence = st.session_state.temp_evidence
         if evidence:
             with st.expander("📝 ARCHIVAL EVIDENCE", expanded=True):
                 st.table(evidence)
 
-        # Persistence
+        last_theme = next(
+            (
+                m["theme"]
+                for m in reversed(st.session_state.messages)
+                if m["role"] == "user"
+            ),
+            "Inquiry",
+        )
+
         st.session_state.messages.append(
             {
                 "role": "assistant",
                 "content": response["output"],
                 "evidence": evidence,
+                "theme": last_theme,
                 "avatar": AVATARS[st.session_state.current_style],
             }
         )

@@ -16,7 +16,6 @@ from core.retriever import get_retriever
 st.set_page_config(page_title="Victoria", page_icon="👑", layout="wide")
 load_dotenv()
 
-# Document titles for archival evidence
 SOURCE_TITLES = {
     "20-Industrial-Rev.pdf": "The Industrial Revolution and its Impact on European Society",
     "1851_GreatExhibition_Cap...gue.pdf": "Official Descriptive and Illustrated Catalogue of the Great Exhibition (1851)",
@@ -77,7 +76,6 @@ def handle_input():
         )
         st.session_state.pending_input = new_prompt
         st.session_state.temp_evidence = []
-        st.session_state.user_text = ""
 
 
 # ==========================================
@@ -109,7 +107,6 @@ def search_royal_archives(query: str):
 st.title("Victoria 👑")
 st.markdown("#### Victorian Era Histographer")
 
-# Character avatars
 AVATARS = {
     "Queen Victoria": "👑",
     "Oscar Wilde": "🎭",
@@ -118,7 +115,6 @@ AVATARS = {
     "user": "🎩",
 }
 
-# Sidebar
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/settings.png")
     st.title("Settings")
@@ -152,7 +148,6 @@ with st.sidebar:
         st.session_state.focus_theme = None
         st.rerun()
 
-# Display messages filtered by theme
 display_messages = st.session_state.messages
 if st.session_state.focus_theme:
     st.info(f"Viewing records: **{st.session_state.focus_theme}**")
@@ -177,24 +172,11 @@ st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
-    # Define character personalities
     persona_prompts = {
-        "Queen Victoria": (
-            "You are Her Majesty Queen Victoria. Speak with absolute royal authority "
-            "and overwhelming charisma. Use 'The Royal We'. Always cite archives."
-        ),
-        "Oscar Wilde": (
-            "You are Oscar Wilde. Be devastatingly flamboyant and witty. "
-            "Every sentence should be an epigram. Always cite archives."
-        ),
-        "Jack the Ripper": (
-            "Speak in a dark, charismatic, yet terrifying cockney whisper. "
-            "You are the shadow of Whitechapel. Always cite archives."
-        ),
-        "Isambard Kingdom Brunel": (
-            "You are the charismatic titan of engineering, Brunel. "
-            "Speak with fire about iron, steam, and visionary feats. Always cite archives."
-        ),
+        "Queen Victoria": "You are Queen Victoria. Speak with absolute royal authority and charisma. Use 'The Royal We'.",
+        "Oscar Wilde": "You are Oscar Wilde. Be flamboyant and witty. Every sentence should be an epigram.",
+        "Jack the Ripper": "Speak in a dark, terrifying cockney whisper. You are the shadow of Whitechapel.",
+        "Isambard Kingdom Brunel": "You are Brunel. Speak with fire about iron and visionary engineering feats.",
     }
 
     from core.tools import victorian_currency_converter, industry_stats_calculator
@@ -211,7 +193,7 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
                 "system",
                 f"{persona_prompts[st.session_state.current_style]} \n\n"
                 "MANDATORY: You MUST use 'search_royal_archives' for EVERY historical inquiry. "
-                "Cite specific page numbers found, but not in the text.",
+                "Do NOT list sources in text; they appear in the table below.",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -226,9 +208,7 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
     )
 
     with st.chat_message("assistant", avatar=AVATARS[st.session_state.current_style]):
-        with st.status(
-            "Searching Royal Archives...", expanded=True
-        ) as status:  # updated
+        with st.status("Searching Royal Archives...", expanded=True) as status:
             response = vic_agent.invoke(
                 {"input": current_input, "chat_history": st.session_state.messages[:-1]}
             )
@@ -236,7 +216,6 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
 
         st.markdown(response["output"])
 
-        # Save and display archival evidence
         evidence_to_save = st.session_state.temp_evidence
         if evidence_to_save:
             with st.expander("📝 ARCHIVAL EVIDENCE", expanded=True):

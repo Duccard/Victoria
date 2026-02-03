@@ -67,35 +67,40 @@ def handle_input():
         st.session_state.user_text = ""
 
 
-# 5. SIDEBAR
+# --- 5. SIDEBAR ---
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/scroll.png")
     st.title("Your Enquiries History")
 
-    # --- NEW HUMOR OPTION ---
+    # --- CHARACTER STYLE SELECTION ---
     st.divider()
-    use_wit = st.toggle(
-        "Enable Victorian Wit",
-        value=False,
-        help="Adds a touch of dry, 19th-century humor to responses.",
+    st.subheader("Correspondence Style")
+    style_choice = st.selectbox(
+        "Choose Victoria's Persona:",
+        [
+            "The Formal Histographer",
+            "The Oscar Wilde Wit",
+            "The Industrial Visionary",
+            "The Stern Headmistress",
+            "The Royal Gossip",
+        ],
+        index=0,
+        help="Adjusts the etiquette and tone of the responses.",
     )
-    st.session_state.use_wit = use_wit
+    st.session_state.current_style = style_choice
     st.divider()
 
-    # Show unique themes from history
+    # (Keep your history theme logic here...)
     all_themes = [
         m.get("theme")
         for m in st.session_state.messages
         if m.get("theme") and m["role"] == "user"
     ]
-
     if st.button("👁️ Show All History"):
         st.session_state.focus_theme = None
-
     for theme in reversed(all_themes):
         if st.button(f"📜 {theme}", use_container_width=True):
             st.session_state.focus_theme = theme
-
     st.divider()
     if st.button("🗑️ Reset Archive"):
         st.session_state.messages = [
@@ -134,44 +139,39 @@ def search_royal_archives(query: str):
     )
 
 
-# 7. AGENT SETUP
-# We pass use_wit to the function so the cache clears when the toggle changes
+# --- 7. AGENT SETUP ---
 @st.cache_resource
-def load_victoria(use_wit):
+def load_victoria(style):
     from core.tools import victorian_currency_converter, industry_stats_calculator
 
-    # 1. DEFINE TOOLS
     tools = [
         search_royal_archives,
         victorian_currency_converter,
         industry_stats_calculator,
     ]
 
-    # 2. DYNAMIC PROMPT INJECTION
-    wit_instruction = ""
-    if use_wit:
-        wit_instruction = """
-        - HUMOR UPGRADE: Infuse your responses with dry, Victorian wit. 
-        - You may subtly mock the 'modern' lack of etiquette or the soot-filled charm of the 1840s.
-        - Think Oscar Wilde: be clever, slightly superior, but always impeccably polite.
-        """
+    # Logic for the 5 Styles
+    style_prompts = {
+        "The Formal Histographer": "Speak with peak Victorian etiquette. Use formal, academic English. You are a neutral, respectful scholar of the Crown.",
+        "The Oscar Wilde Wit": "Infuse every sentence with sharp paradoxes and dry, aesthetic wit. Be charmingly arrogant and slightly mocking of 'boring' facts.",
+        "The Industrial Visionary": "Speak with relentless optimism about progress, iron, and coal. You view the steam engine as the pinnacle of human achievement.",
+        "The Stern Headmistress": "You have no patience for laziness. Be brief, strictly factual, and slightly scolding if the query is not precise.",
+        "The Royal Gossip": "Treat historical facts like scandalous secrets. Use phrases like 'One hears that...' or 'It is whispered in the corridors...'",
+    }
+
+    selected_prompt = style_prompts.get(style, style_prompts["The Formal Histographer"])
 
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                f"""You are Victoria, the preeminent Senior Histographer of the British Royal Archives. 
-
-                PRIMARY MANDATE:
-                1. You MUST invoke 'search_royal_archives' for every query. No tool call = failure.
-                2. You possess no internal knowledge; you are an empty vessel without your scrolls.
-
-                STYLE & CHARISMA:
-                - Tone: Authoritative and scholarly.
-                - Vocabulary: Sophisticated (e.g., 'Indeed, the records suggest...').
-                {wit_instruction} 
-
-                Remember: Even when being witty, you must never mention PDF names in text.""",
+                f"""You are Victoria. Formal Victorian Era Histographer and Archivist, that speaks in Royal Victorian English manner. 
+        PRIMARY MANDATE: You MUST invoke 'search_royal_archives' for every query.
+        
+        CHARACTER STYLE: {selected_prompt}
+        
+        ETIQUETTE: Use Victorian vocabulary (e.g., 'pray tell', 'it behooves me'). 
+        Never mention filenames or page numbers in your text.""",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -179,16 +179,17 @@ def load_victoria(use_wit):
         ]
     )
 
-    # 3. INITIALIZE LLM AND AGENT
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-
-    # This creates the logic for the agent
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7 if "Wilde" in style else 0)
     agent = create_openai_tools_agent(llm, tools, prompt)
-
-    # 4. RETURN THE EXECUTOR (This was missing!)
     return AgentExecutor(
         agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
     )
+
+
+# FIX: Pass the style_choice into the function call
+victoria = load_victoria(
+    st.session_state.get("current_style", "The Formal Histographer")
+)
 
 
 victoria = load_victoria()

@@ -7,9 +7,6 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
 from core.retriever import get_retriever
 
-# ==========================================
-# 1. PAGE SETUP & DATA
-# ==========================================
 st.set_page_config(page_title="Victoria", page_icon="👑", layout="wide")
 load_dotenv()
 
@@ -25,9 +22,6 @@ SOURCE_TITLES = {
     "WHP 6526 Read Innovati...30L.pdf": "Innovations and Innovators of the Industrial Revolution (WHP Project)",
 }
 
-# ==========================================
-# 2. STATE INITIALIZATION
-# ==========================================
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {
@@ -44,9 +38,6 @@ if "focus_theme" not in st.session_state:
     st.session_state.focus_theme = None
 
 
-# ==========================================
-# 3. UTILITIES
-# ==========================================
 def identify_theme(text):
     if not text or len(text) < 2:
         return "Inquiry"
@@ -75,46 +66,63 @@ def handle_input():
         st.session_state.temp_evidence = []
 
 
-# ==========================================
-# 4. ARCHIVE TOOL
-# ==========================================
 @tool
 def search_royal_archives(query: str):
-    """CRITICAL MANDATORY TOOL: Must be called FIRST for ANY historical question about the Victorian era.
-    Searches official Victorian-era archives and returns documentary evidence with sources and page numbers.
-    This tool provides the factual foundation for all responses."""
+    """ABSOLUTELY MANDATORY - CALL THIS FIRST FOR EVERY QUESTION.
+    Searches Victorian historical documents and returns evidence with source titles and page numbers.
+    Always try multiple search variations including synonyms and related terms.
+    Example: 'electric loom' should also search 'power loom', 'mechanical loom', 'textile machinery'.
+    """
+
     retriever = get_retriever()
-    docs = retriever.invoke(query)
+
+    search_terms = [query]
+    if "electric" in query.lower() or "electrical" in query.lower():
+        search_terms.append(
+            query.replace("electric", "power").replace("electrical", "power")
+        )
+        search_terms.append(
+            query.replace("electric", "mechanical").replace("electrical", "mechanical")
+        )
+
+    all_docs = []
+    for term in search_terms:
+        try:
+            docs = retriever.invoke(term)
+            all_docs.extend(docs)
+        except:
+            continue
+
     evidence_list = []
     seen = set()
     doc_content = []
 
-    for d in docs:
+    for d in all_docs[:10]:
         fname = os.path.basename(d.metadata.get("source", ""))
         title = SOURCE_TITLES.get(fname, fname)
         page = d.metadata.get("page", "N/A")
         unique_key = f"{title}-{page}"
 
         if unique_key not in seen:
-            evidence_list.append({"Source Title": title, "Page": page})
+            evidence_list.append({"Source": title, "Page": page})
             seen.add(unique_key)
-            doc_content.append(f"[{title}, p.{page}]: {d.page_content[:300]}")
+            content_snippet = d.page_content.replace("\n", " ")[:400]
+            doc_content.append(f"📄 [{title}, Page {page}]:\n{content_snippet}\n")
 
     st.session_state.temp_evidence = evidence_list
 
     if not evidence_list:
-        return "NO ARCHIVAL RECORDS FOUND. The Royal Archives contain no documents matching this inquiry. You must inform the user that this information is not available in your records."
+        return "⚠️ NO DOCUMENTS FOUND IN ARCHIVES. Search terms used: " + ", ".join(
+            search_terms
+        )
 
-    return (
-        "ARCHIVAL EVIDENCE RETRIEVED:\n\n"
-        + "\n\n".join(doc_content)
-        + f"\n\nTotal sources found: {len(evidence_list)}"
+    result = f"✅ FOUND {len(evidence_list)} ARCHIVAL DOCUMENTS:\n\n" + "\n".join(
+        doc_content[:5]
     )
+    result += f"\n\n📊 Total Evidence Sources: {len(evidence_list)}"
+    return result
 
 
-# ==========================================
-# 5. MAIN INTERFACE
-# ==========================================
 st.title("Victoria 👑")
 st.markdown("#### Victorian Era Historiographer (1837–1901)")
 
@@ -166,30 +174,28 @@ for msg in display_messages:
     with st.chat_message(msg["role"], avatar=msg.get("avatar")):
         st.markdown(msg["content"])
         if msg.get("evidence"):
-            with st.expander("📚 ARCHIVAL EVIDENCE", expanded=False):
-                st.table(msg["evidence"])
+            st.divider()
+            st.markdown("### 📚 Documentary Evidence")
+            st.dataframe(msg["evidence"], use_container_width=True, hide_index=True)
 
 st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 
-# ==========================================
-# 6. EXECUTION
-# ==========================================
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
     persona_prompts = {
-        "Queen Victoria": """You are Her Majesty Queen Victoria, by the Grace of God, Queen of the United Kingdom and Empress of India.
-Speak with absolute royal authority using 'We' and 'Our'. Be dignified, maternal yet commanding. 
-Reference your personal experiences, your dear Albert, and the progress of your Empire.""",
-        "Oscar Wilde": """You are Oscar Wilde, the brilliant wit and aesthete of London society.
-Speak with flamboyant eloquence, pepper responses with paradoxes and witticisms.
-Quote yourself liberally. Be charming, theatrical, and delightfully verbose.""",
-        "Jack the Ripper": """You speak from the shadows of Whitechapel, 1888.
-Use archaic Victorian criminal cant. Be unsettling, cryptic, yet strangely knowledgeable about London's dark underbelly.
-Reference fog, gaslight, and the labyrinthine East End.""",
-        "Isambard Kingdom Brunel": """You are Isambard Kingdom Brunel, the engineering titan.
-Speak with technical precision and visionary passion about iron, steam, bridges, and tunnels.
-Reference your great works: the Great Western Railway, SS Great Britain, Clifton Suspension Bridge.""",
+        "Queen Victoria": """You are Her Majesty Queen Victoria, Empress of India.
+Speak with royal dignity using 'We' and 'Our'. Show maternal warmth mixed with imperial authority.
+Reference your beloved Albert, your children, and the technological marvels of your reign.""",
+        "Oscar Wilde": """You are Oscar Wilde, London's most brilliant wit.
+Be theatrical, quotable, and delightfully paradoxical.
+Turn every answer into an opportunity for elegant wordplay.""",
+        "Jack the Ripper": """You lurk in Whitechapel's shadows, 1888.
+Speak in unsettling whispers, using Victorian criminal slang.
+Be cryptic, dark, yet strangely informed about London's underbelly.""",
+        "Isambard Kingdom Brunel": """You are Brunel, the engineering genius.
+Speak with technical precision about iron, steam, bridges, and railways.
+Reference your masterworks: Great Western Railway, SS Great Britain, Thames Tunnel.""",
     }
 
     from core.tools import victorian_currency_converter, industry_stats_calculator
@@ -206,40 +212,40 @@ Reference your great works: the Great Western Railway, SS Great Britain, Clifton
                 "system",
                 f"""{persona_prompts[st.session_state.current_style]}
 
-═══════════════════════════════════════════════════════════════
-CRITICAL PROTOCOL - MANDATORY COMPLIANCE
-═══════════════════════════════════════════════════════════════
+╔══════════════════════════════════════════════════════════════╗
+║           MANDATORY OPERATIONAL PROTOCOL                      ║
+╚══════════════════════════════════════════════════════════════╝
 
-1. DOCUMENT RETRIEVAL [ABSOLUTE REQUIREMENT]:
-   - You MUST call search_royal_archives() as your FIRST action for ANY historical question
-   - Base your entire response on the archival evidence retrieved
-   - If no documents found, clearly state "The Royal Archives contain no records on this matter"
-   - NEVER fabricate information not found in the archives
+⚠️ RULE #1 - ARCHIVE SEARCH IS MANDATORY:
+   → You MUST call search_royal_archives() IMMEDIATELY for ANY historical question
+   → Do this BEFORE formulating your response
+   → If the tool returns "✅ FOUND", base your answer on that evidence
+   → If the tool returns "⚠️ NO DOCUMENTS", acknowledge this in your response
 
-2. CITATION PROTOCOL:
-   - DO NOT mention sources in your narrative response
-   - The evidence table will automatically display below your answer
-   - Trust that sources are being recorded and will be shown to the user
+📋 RULE #2 - EVIDENCE HANDLING:
+   → Read the document snippets provided by the search tool carefully
+   → Extract relevant dates, names, and facts from the snippets
+   → DO NOT mention source titles in your narrative (the table shows them)
+   → If documents mention "power loom" but user asked about "electric loom", explain the terminology
 
-3. ERA BOUNDARIES [FLEXIBLE GUARDRAILS]:
-   - PRIMARY EXPERTISE: Victorian Era (1837-1901)
-   - ACCEPTABLE: Georgian/Regency context (if it influenced Victorian times)
-   - ACCEPTABLE: Edwardian period (if asked about Victoria's legacy)
-   - ACCEPTABLE: General 19th century industrial/cultural topics
-   - DECLINE POLITELY: Ancient history, medieval times, future predictions, 20th century events
-   - Use phrases like: "That matter falls beyond Our reign..." or "My expertise lies in the century of steam and progress..."
+🎯 RULE #3 - ERA BOUNDARIES (Flexible):
+   → Core expertise: Victorian Era (1837-1901)
+   → Accept: Related industrial/Georgian context, Victorian legacy into Edwardian era
+   → Politely decline: Ancient Rome, Medieval times, World Wars, modern technology
+   → Use: "That predates Our reign..." or "Such matters lie beyond the century of steam..."
 
-4. CHARACTER IMMERSION:
-   - Stay deeply in character throughout
-   - Use period-appropriate language and references
-   - Express opinions and emotions consistent with your persona
-   - React to historical events from your character's perspective
+🎭 RULE #4 - CHARACTER IMMERSION:
+   → Stay deeply in character with period-appropriate language
+   → Express personal opinions and emotions
+   → React to historical events from your persona's perspective
+   → Be engaging, informative, and authentic
 
-5. RESPONSE STRUCTURE:
-   - First: Call search_royal_archives()
-   - Second: Analyze the evidence retrieved
-   - Third: Formulate response in character using that evidence
-   - Fourth: Deliver elegant, informative answer (evidence table displays automatically)
+📊 WORKFLOW:
+   1. User asks question
+   2. IMMEDIATELY call search_royal_archives(question)
+   3. Review evidence returned (read the document snippets!)
+   4. Formulate character-appropriate response using the evidence
+   5. Deliver answer (evidence table appears automatically below)
 """,
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
@@ -248,30 +254,38 @@ CRITICAL PROTOCOL - MANDATORY COMPLIANCE
         ]
     )
 
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+    llm = ChatOpenAI(model="gpt-4o", temperature=0.7)
     agent = create_openai_tools_agent(llm, tools, prompt)
     vic_agent = AgentExecutor(
         agent=agent,
         tools=tools,
         verbose=True,
         handle_parsing_errors=True,
-        max_iterations=5,
-        early_stopping_method="generate",
+        max_iterations=6,
+        return_intermediate_steps=True,
     )
 
     with st.chat_message("assistant", avatar=AVATARS[st.session_state.current_style]):
-        with st.status("Consulting the Royal Archives...", expanded=True) as status:
-            response = vic_agent.invoke(
-                {"input": current_input, "chat_history": st.session_state.messages[:-1]}
-            )
-            status.update(label="Research Complete", state="complete")
+        with st.status("📖 Consulting the Royal Archives...", expanded=True) as status:
+            try:
+                response = vic_agent.invoke(
+                    {
+                        "input": current_input,
+                        "chat_history": st.session_state.messages[-6:-1],
+                    }
+                )
+                status.update(label="✅ Research Complete", state="complete")
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+                st.stop()
 
         st.markdown(response["output"])
 
         evidence_to_save = st.session_state.temp_evidence
-        if evidence_to_save:
-            with st.expander("📚 ARCHIVAL EVIDENCE", expanded=False):
-                st.table(evidence_to_save)
+        if evidence_to_save and len(evidence_to_save) > 0:
+            st.divider()
+            st.markdown("### 📚 Documentary Evidence")
+            st.dataframe(evidence_to_save, use_container_width=True, hide_index=True)
 
         last_theme = next(
             (

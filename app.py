@@ -75,9 +75,18 @@ with st.sidebar:
         "Select Correspondent:",
         ["Queen Victoria", "Oscar Wilde", "Jack the Ripper", "Isambard Kingdom Brunel"],
         index=0,
-        help="Swaps the AI persona to a specific Victorian figure.",
     )
+
+    char_strength = st.slider(
+        "Character Strength:",
+        min_value=1,
+        max_value=3,
+        value=2,
+        help="1: Subtle & Academic | 2: Distinct Personality | 3: Full Method Acting",
+    )
+
     st.session_state.current_style = style_choice
+    st.session_state.char_strength = char_strength
     st.divider()
 
     all_themes = [
@@ -89,7 +98,6 @@ with st.sidebar:
     if st.button("👁️ Show All History"):
         st.session_state.focus_theme = None
 
-    # FIX: Using enumerate to prevent DuplicateElementId errors
     for i, theme in enumerate(reversed(all_themes)):
         if st.button(f"📜 {theme}", key=f"hist_{i}_{theme}", use_container_width=True):
             st.session_state.focus_theme = theme
@@ -134,7 +142,7 @@ def search_royal_archives(query: str):
 
 # --- 7. AGENT SETUP ---
 @st.cache_resource
-def load_victoria(style):
+def load_victoria(style, strength):
     from core.tools import victorian_currency_converter, industry_stats_calculator
 
     tools = [
@@ -143,25 +151,32 @@ def load_victoria(style):
         industry_stats_calculator,
     ]
 
-    style_prompts = {
-        "Queen Victoria": "You are Her Majesty Queen Victoria. Speak with royal authority using the 'Royal We'. You are dignified, traditional, and deeply concerned with the Empire's morality.",
-        "Oscar Wilde": "You are the famous playwright. Be witty, flamboyant, and aesthetic. Use paradoxical statements and sharp dry humor.",
-        "Jack the Ripper": "Speak in a dark, mysterious, and menacing whisper. Use cockney slang. You are elusive, dwelling in the shadows of Whitechapel.",
-        "Isambard Kingdom Brunel": "You are the great engineer. Speak with intense passion for iron, steam, and massive progress. You are practical and bold.",
+    strength_modifiers = {
+        1: "Maintain a professional balance. Use subtle hints of your persona.",
+        2: "Clearly embody your persona. Use signature phrases and distinct attitudes.",
+        3: "EXAGGERATE your persona. Be theatrical, highly opinionated, and fully immersed.",
     }
 
-    selected_prompt = style_prompts.get(style, style_prompts["Queen Victoria"])
+    style_prompts = {
+        "Queen Victoria": "Her Majesty the Queen. Use the 'Royal We'. Be dignified and concerned with Empire morality.",
+        "Oscar Wilde": "The flamboyant playwright. Be witty, flamboyant, and use sharp dry wit.",
+        "Jack the Ripper": "Dark, mysterious, and menacing cockney whisper. Speak from the shadows.",
+        "Isambard Kingdom Brunel": "The visionary engineer. Obsessed with iron, steam, and progress.",
+    }
+
+    selected_style = style_prompts.get(style, style_prompts["Queen Victoria"])
+    selected_strength = strength_modifiers.get(strength, strength_modifiers[2])
 
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
                 f"""You are a Royal Histographer. 
-        CURRENT PERSONA: {selected_prompt}
+        CURRENT PERSONA: {selected_style}
+        STRENGTH LEVEL: {selected_strength}
         
         MANDATORY: You MUST invoke 'search_royal_archives' for every query.
-        ETIQUETTE: Use Victorian vocabulary. 
-        Never mention filenames or page numbers in your text.""",
+        ETIQUETTE: Use Victorian vocabulary. Never mention filenames in response text.""",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -169,21 +184,23 @@ def load_victoria(style):
         ]
     )
 
-    temp = 0.7 if style in ["Oscar Wilde", "Jack the Ripper"] else 0.1
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=temp)
+    temp_map = {1: 0.1, 2: 0.5, 3: 0.9}
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=temp_map[strength])
     agent = create_openai_tools_agent(llm, tools, prompt)
     return AgentExecutor(
         agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
     )
 
 
-# LOAD AGENT
-victoria = load_victoria(st.session_state.get("current_style", "Queen Victoria"))
+victoria = load_victoria(
+    st.session_state.get("current_style", "Queen Victoria"),
+    st.session_state.get("char_strength", 2),
+)
 
 # 8. MAIN INTERFACE
 st.title("Victoria 👑")
 st.subheader(
-    f"Current Correspondent: {st.session_state.get('current_style', 'Queen Victoria')}"
+    f"Current Correspondent: {st.session_state.get('current_style', 'Queen Victoria')} (Strength {st.session_state.get('char_strength', 2)})"
 )
 
 display_messages = st.session_state.messages
@@ -210,14 +227,14 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
     with st.chat_message("assistant"):
-        with st.status("Searching the Royal Archives...", expanded=True) as status:
+        with st.status("Searching Royal Archives...", expanded=True) as status:
             response = victoria.invoke(
                 {"input": current_input, "chat_history": st.session_state.messages[:-1]}
             )
             answer = response["output"]
-            status.update(label="Complete", state="complete")
-        st.markdown(answer)
+            status.update(label="Archives Consulted", state="complete")
 
+        st.markdown(answer)
         curr_ev = (
             st.session_state.temp_evidence if st.session_state.temp_evidence else None
         )

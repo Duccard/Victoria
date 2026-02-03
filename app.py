@@ -65,14 +65,13 @@ def handle_input():
     if st.session_state.user_text:
         new_prompt = st.session_state.user_text
         theme = identify_theme(new_prompt)
-        # Attach the theme to the user message
         st.session_state.messages.append(
             {
                 "role": "user",
                 "content": new_prompt,
                 "theme": theme,
                 "avatar": "🎩",
-                "evidence": None,  # evidence will be filled after agent execution
+                "evidence": None,
             }
         )
         st.session_state.pending_input = new_prompt
@@ -97,7 +96,7 @@ def search_royal_archives(query: str):
         if ref not in seen:
             evidence_list.append({"Source Title": title, "Page": page})
             seen.add(ref)
-    st.session_state.temp_evidence = evidence_list  # store for display
+    st.session_state.temp_evidence = evidence_list
     return "\n".join(
         [f"Source: {e['Source Title']} (Page {e['Page']})" for e in evidence_list]
     )
@@ -150,7 +149,6 @@ with st.sidebar:
         st.session_state.focus_theme = None
         st.rerun()
 
-# Display messages
 display_messages = st.session_state.messages
 if st.session_state.focus_theme:
     st.info(f"Viewing records: **{st.session_state.focus_theme}**")
@@ -176,10 +174,10 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
     persona_prompts = {
-        "Queen Victoria": "You are Her Majesty Queen Victoria. Speak with absolute royal authority and overwhelming charisma. Use 'The Royal We'. Always cite archives.",
-        "Oscar Wilde": "You are Oscar Wilde. Be devastatingly flamboyant and witty. Every sentence should be an epigram. Always cite archives.",
-        "Jack the Ripper": "Speak in a dark, charismatic, yet terrifying cockney whisper. You are the shadow of Whitechapel. Always cite archives.",
-        "Isambard Kingdom Brunel": "You are the charismatic titan of engineering, Brunel. Speak with fire about iron, steam, and visionary feats. Always cite archives.",
+        "Queen Victoria": "You are Queen Victoria. Speak with absolute royal authority and charisma. Use 'The Royal We'.",
+        "Oscar Wilde": "You are Oscar Wilde. Be flamboyant and witty. Every sentence should be an epigram.",
+        "Jack the Ripper": "Speak in a dark, terrifying cockney whisper. You are the shadow of Whitechapel.",
+        "Isambard Kingdom Brunel": "You are Brunel. Speak with fire about iron and visionary engineering feats.",
     }
 
     from core.tools import victorian_currency_converter, industry_stats_calculator
@@ -194,7 +192,7 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
         [
             (
                 "system",
-                f"{persona_prompts[st.session_state.current_style]} \n\nMANDATORY: You MUST use 'search_royal_archives' for EVERY historical inquiry. Cite specific page numbers found.",
+                f"{persona_prompts[st.session_state.current_style]} \n\nMANDATORY: Use 'search_royal_archives' for ALL facts. Do NOT list source names or page numbers in your spoken response; the system will display them in a separate table automatically. Keep the focus on your character's voice.",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
@@ -217,7 +215,6 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
 
         st.markdown(response["output"])
 
-        # --- Attach evidence to this assistant message ---
         evidence_to_save = (
             st.session_state.temp_evidence if st.session_state.temp_evidence else None
         )
@@ -234,7 +231,6 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
             "Inquiry",
         )
 
-        # Save the assistant message with evidence
         st.session_state.messages.append(
             {
                 "role": "assistant",

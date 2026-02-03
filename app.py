@@ -76,7 +76,7 @@ def handle_input():
         )
         st.session_state.pending_input = new_prompt
         st.session_state.temp_evidence = []
-        st.session_state.user_text = ""
+        # REMOVED: st.session_state.user_text = "" (This caused the error)
 
 
 # ==========================================
@@ -84,7 +84,7 @@ def handle_input():
 # ==========================================
 @tool
 def search_royal_archives(query: str):
-    """Search the Victorian-era archives and return sources and pages for a query."""
+    """Search the Victorian-era archives and return sources and pages."""
     retriever = get_retriever()
     docs = retriever.invoke(query)
     evidence_list = []
@@ -129,23 +129,17 @@ with st.sidebar:
         for m in st.session_state.messages
         if m.get("theme") and m["role"] == "user"
     ]
+
     if st.button("👁️ Show All Records", use_container_width=True):
         st.session_state.focus_theme = None
+
     for i, theme in enumerate(reversed(list(dict.fromkeys(all_themes)))):
         if st.button(f"📜 {theme}", key=f"hist_{i}", use_container_width=True):
             st.session_state.focus_theme = theme
 
     st.divider()
     if st.button("🗑️ Reset Archive", use_container_width=True):
-        st.session_state.messages = [
-            {
-                "role": "assistant",
-                "content": "Archives cleared.",
-                "avatar": "👑",
-                "theme": "Greeting",
-                "evidence": None,
-            }
-        ]
+        st.session_state.messages = [st.session_state.messages[0]]
         st.session_state.focus_theme = None
         st.rerun()
 
@@ -173,25 +167,11 @@ st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
-    # Stronger, theatrical character personalities
     persona_prompts = {
-        "Queen Victoria": (
-            "You are Her Majesty Queen Victoria. Speak with absolute royal authority, grandeur, "
-            "and eloquence. Use 'The Royal We'. Always insist on consulting 'search_royal_archives' "
-            "for historical questions."
-        ),
-        "Oscar Wilde": (
-            "You are Oscar Wilde. Speak with wit, flamboyance, and epigrammatic elegance. "
-            "Always insist on consulting 'search_royal_archives' for historical questions."
-        ),
-        "Jack the Ripper": (
-            "You are Jack the Ripper. Speak in dark, chilling whispers, full of menace and intrigue. "
-            "Always consult 'search_royal_archives' for historical questions if applicable."
-        ),
-        "Isambard Kingdom Brunel": (
-            "You are Brunel. Speak with fiery enthusiasm about engineering, innovation, and vision. "
-            "Always consult 'search_royal_archives' for historical questions."
-        ),
+        "Queen Victoria": "You are Queen Victoria. Speak with absolute royal authority and 'The Royal We'.",
+        "Oscar Wilde": "You are Oscar Wilde. Speak with wit and flamboyant elegance.",
+        "Jack the Ripper": "You are Jack the Ripper. Speak in dark, chilling whispers.",
+        "Isambard Kingdom Brunel": "You are Brunel. Speak with fiery enthusiasm about engineering.",
     }
 
     from core.tools import victorian_currency_converter, industry_stats_calculator
@@ -206,9 +186,7 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
         [
             (
                 "system",
-                f"{persona_prompts[st.session_state.current_style]}\n\n"
-                "MANDATORY: For every historical/Victorian-era inquiry, use 'search_royal_archives' "
-                "to find evidence in documents. Do NOT include sources in text; they appear in the table.",
+                f"{persona_prompts[st.session_state.current_style]}\n\nMANDATORY: Use 'search_royal_archives' for history. Do NOT include sources in text; they appear in the table.",
             ),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),

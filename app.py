@@ -1,9 +1,5 @@
-# ==========================================
-# 0. IMPORTS
-# ==========================================
 import streamlit as st
 import os
-import pandas as pd
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor, create_openai_tools_agent
@@ -36,16 +32,16 @@ if "messages" not in st.session_state:
     st.session_state.messages = [
         {
             "role": "assistant",
-            "content": "Good day. How may I assist your research today?",
+            "content": "We are pleased to receive you. How may We assist your research into Our Empire (1837-1901) today?",
             "avatar": "👑",
             "theme": "Greeting",
             "evidence": None,
         }
     ]
+if "temp_evidence" not in st.session_state:
+    st.session_state.temp_evidence = []
 if "focus_theme" not in st.session_state:
     st.session_state.focus_theme = None
-if "current_evidence" not in st.session_state:
-    st.session_state.current_evidence = []
 
 
 # ==========================================
@@ -76,36 +72,52 @@ def handle_input():
             }
         )
         st.session_state.pending_input = new_prompt
-        st.session_state.current_evidence = []
-        st.session_state.focus_theme = None
+        st.session_state.temp_evidence = []
 
 
 # ==========================================
-# 4. ARCHIVE TOOL (FIXED EVIDENCE OUTPUT)
+# 4. ARCHIVE TOOL
 # ==========================================
 @tool
 def search_royal_archives(query: str):
-    """MANDATORY: Use this to retrieve documents and page numbers for the evidence table."""
+    """CRITICAL MANDATORY TOOL: Must be called FIRST for ANY historical question about the Victorian era.
+    Searches official Victorian-era archives and returns documentary evidence with sources and page numbers.
+    This tool provides the factual foundation for all responses."""
     retriever = get_retriever()
     docs = retriever.invoke(query)
     evidence_list = []
     seen = set()
+    doc_content = []
+
     for d in docs:
         fname = os.path.basename(d.metadata.get("source", ""))
         title = SOURCE_TITLES.get(fname, fname)
         page = d.metadata.get("page", "N/A")
-        if f"{title}-{page}" not in seen:
-            evidence_list.append({"Source Title": title, "Reference/Page": page})
-            seen.add(f"{title}-{page}")
+        unique_key = f"{title}-{page}"
 
-    # FORCED INJECTION: Ensuring evidence is saved even if the agent loop is complex
-    st.session_state.current_evidence = evidence_list
-    return f"Documents found: {str(evidence_list)}"
+        if unique_key not in seen:
+            evidence_list.append({"Source Title": title, "Page": page})
+            seen.add(unique_key)
+            doc_content.append(f"[{title}, p.{page}]: {d.page_content[:300]}")
+
+    st.session_state.temp_evidence = evidence_list
+
+    if not evidence_list:
+        return "NO ARCHIVAL RECORDS FOUND. The Royal Archives contain no documents matching this inquiry. You must inform the user that this information is not available in your records."
+
+    return (
+        "ARCHIVAL EVIDENCE RETRIEVED:\n\n"
+        + "\n\n".join(doc_content)
+        + f"\n\nTotal sources found: {len(evidence_list)}"
+    )
 
 
 # ==========================================
-# 5. SIDEBAR & INTERFACE
+# 5. MAIN INTERFACE
 # ==========================================
+st.title("Victoria 👑")
+st.markdown("#### Victorian Era Historiographer (1837–1901)")
+
 AVATARS = {
     "Queen Victoria": "👑",
     "Oscar Wilde": "🎭",
@@ -115,13 +127,13 @@ AVATARS = {
 }
 
 with st.sidebar:
-    st.title("Correspondent")
-    st.session_state.current_style = st.selectbox(
-        "Select Character:", list(AVATARS.keys())[:-1]
-    )
+    st.image("https://img.icons8.com/color/96/settings.png")
+    st.title("Settings")
+    style_choice = st.selectbox("Select Correspondent:", list(AVATARS.keys())[:-1])
+    st.session_state.current_style = style_choice
 
     st.divider()
-    st.subheader("📜 Inquiry History")  # RESTORED SECTION
+    st.subheader("Inquiry History")
     all_themes = [
         m.get("theme")
         for m in st.session_state.messages
@@ -138,15 +150,12 @@ with st.sidebar:
     st.divider()
     if st.button("🗑️ Reset Archive", use_container_width=True):
         st.session_state.messages = [st.session_state.messages[0]]
+        st.session_state.focus_theme = None
         st.rerun()
 
-st.title("Victoria 👑")
-st.markdown("#### Histographer Agent")
-
-# Filter logic for history
 display_messages = st.session_state.messages
 if st.session_state.focus_theme:
-    st.info(f"Viewing records for: **{st.session_state.focus_theme}**")
+    st.info(f"Viewing records: **{st.session_state.focus_theme}**")
     display_messages = [
         m
         for m in st.session_state.messages
@@ -157,8 +166,8 @@ for msg in display_messages:
     with st.chat_message(msg["role"], avatar=msg.get("avatar")):
         st.markdown(msg["content"])
         if msg.get("evidence"):
-            st.info("📂 **VERIFIED SOURCES FROM ARCHIVES**")
-            st.table(msg["evidence"])
+            with st.expander("📚 ARCHIVAL EVIDENCE", expanded=False):
+                st.table(msg["evidence"])
 
 st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 
@@ -168,48 +177,101 @@ st.chat_input("Enter your inquiry...", key="user_text", on_submit=handle_input)
 if "pending_input" in st.session_state and st.session_state.pending_input:
     current_input = st.session_state.pop("pending_input")
 
-    persona = {
-        "Queen Victoria": "You are Her Majesty Queen Victoria. Speak with absolute royal authority.",
-        "Oscar Wilde": "You are Oscar Wilde. Speak with wit and flamboyant elegance.",
-        "Jack the Ripper": "Speak in a dark, menacing whisper.",
-        "Isambard Kingdom Brunel": "Speak with engineering passion.",
-    }[st.session_state.current_style]
+    persona_prompts = {
+        "Queen Victoria": """You are Her Majesty Queen Victoria, by the Grace of God, Queen of the United Kingdom and Empress of India.
+Speak with absolute royal authority using 'We' and 'Our'. Be dignified, maternal yet commanding. 
+Reference your personal experiences, your dear Albert, and the progress of your Empire.""",
+        "Oscar Wilde": """You are Oscar Wilde, the brilliant wit and aesthete of London society.
+Speak with flamboyant eloquence, pepper responses with paradoxes and witticisms.
+Quote yourself liberally. Be charming, theatrical, and delightfully verbose.""",
+        "Jack the Ripper": """You speak from the shadows of Whitechapel, 1888.
+Use archaic Victorian criminal cant. Be unsettling, cryptic, yet strangely knowledgeable about London's dark underbelly.
+Reference fog, gaslight, and the labyrinthine East End.""",
+        "Isambard Kingdom Brunel": """You are Isambard Kingdom Brunel, the engineering titan.
+Speak with technical precision and visionary passion about iron, steam, bridges, and tunnels.
+Reference your great works: the Great Western Railway, SS Great Britain, Clifton Suspension Bridge.""",
+    }
 
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    tools = [search_royal_archives]
+    from core.tools import victorian_currency_converter, industry_stats_calculator
+
+    tools = [
+        search_royal_archives,
+        victorian_currency_converter,
+        industry_stats_calculator,
+    ]
 
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                f"{persona}\n\n"
-                "MANDATORY: You MUST use 'search_royal_archives' for historical facts. "
-                "DO NOT write the sources in your response. "
-                "If it is outside Victorian history, use general knowledge but mention it is outside the royal records.",
+                f"""{persona_prompts[st.session_state.current_style]}
+
+═══════════════════════════════════════════════════════════════
+CRITICAL PROTOCOL - MANDATORY COMPLIANCE
+═══════════════════════════════════════════════════════════════
+
+1. DOCUMENT RETRIEVAL [ABSOLUTE REQUIREMENT]:
+   - You MUST call search_royal_archives() as your FIRST action for ANY historical question
+   - Base your entire response on the archival evidence retrieved
+   - If no documents found, clearly state "The Royal Archives contain no records on this matter"
+   - NEVER fabricate information not found in the archives
+
+2. CITATION PROTOCOL:
+   - DO NOT mention sources in your narrative response
+   - The evidence table will automatically display below your answer
+   - Trust that sources are being recorded and will be shown to the user
+
+3. ERA BOUNDARIES [FLEXIBLE GUARDRAILS]:
+   - PRIMARY EXPERTISE: Victorian Era (1837-1901)
+   - ACCEPTABLE: Georgian/Regency context (if it influenced Victorian times)
+   - ACCEPTABLE: Edwardian period (if asked about Victoria's legacy)
+   - ACCEPTABLE: General 19th century industrial/cultural topics
+   - DECLINE POLITELY: Ancient history, medieval times, future predictions, 20th century events
+   - Use phrases like: "That matter falls beyond Our reign..." or "My expertise lies in the century of steam and progress..."
+
+4. CHARACTER IMMERSION:
+   - Stay deeply in character throughout
+   - Use period-appropriate language and references
+   - Express opinions and emotions consistent with your persona
+   - React to historical events from your character's perspective
+
+5. RESPONSE STRUCTURE:
+   - First: Call search_royal_archives()
+   - Second: Analyze the evidence retrieved
+   - Third: Formulate response in character using that evidence
+   - Fourth: Deliver elegant, informative answer (evidence table displays automatically)
+""",
             ),
-            MessagesPlaceholder(variable_name="chat_history"),
+            MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
         ]
     )
 
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
     agent = create_openai_tools_agent(llm, tools, prompt)
-    executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+    vic_agent = AgentExecutor(
+        agent=agent,
+        tools=tools,
+        verbose=True,
+        handle_parsing_errors=True,
+        max_iterations=5,
+        early_stopping_method="generate",
+    )
 
     with st.chat_message("assistant", avatar=AVATARS[st.session_state.current_style]):
-        with st.status("Accessing Royal Vaults...") as status:
-            response = executor.invoke(
+        with st.status("Consulting the Royal Archives...", expanded=True) as status:
+            response = vic_agent.invoke(
                 {"input": current_input, "chat_history": st.session_state.messages[:-1]}
             )
-            status.update(label="Evidence Retrieved", state="complete")
+            status.update(label="Research Complete", state="complete")
 
         st.markdown(response["output"])
 
-        # DISPLAY AND SAVE EVIDENCE
-        final_ev = st.session_state.current_evidence
-        if final_ev:
-            st.info("📂 **VERIFIED SOURCES FROM ARCHIVES**")
-            st.table(final_ev)
+        evidence_to_save = st.session_state.temp_evidence
+        if evidence_to_save:
+            with st.expander("📚 ARCHIVAL EVIDENCE", expanded=False):
+                st.table(evidence_to_save)
 
         last_theme = next(
             (
@@ -219,13 +281,14 @@ if "pending_input" in st.session_state and st.session_state.pending_input:
             ),
             "Inquiry",
         )
+
         st.session_state.messages.append(
             {
                 "role": "assistant",
                 "content": response["output"],
-                "avatar": AVATARS[st.session_state.current_style],
-                "evidence": final_ev,
+                "evidence": evidence_to_save if evidence_to_save else None,
                 "theme": last_theme,
+                "avatar": AVATARS[st.session_state.current_style],
             }
         )
     st.rerun()
